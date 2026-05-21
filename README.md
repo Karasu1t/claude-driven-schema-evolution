@@ -95,6 +95,21 @@ graph LR
 
 ---
 
+## Proven Approach
+
+**Real-world track record** (different tech stack, same principle):
+
+- Implemented **AI-assisted workflow automation** across data transformation pipelines
+- **90% reduction** in requirement-to-test turnaround time
+- **18% increase** in delivery value capture
+- Deployed in production at scale
+
+This portfolio applies the **same operational discipline and AI-integration pattern** to a new technology domain: **dbt + Snowflake/Iceberg + GitHub Actions** (first hands-on project with these specific technologies).
+
+The principle remains: _AI as draft generator → human review/CI gates → proven output._
+
+---
+
 ## Technology Rationale
 
 ### dbt
