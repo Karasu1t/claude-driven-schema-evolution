@@ -1,8 +1,8 @@
-# Streaming Data Stack Hands-On
+# Claude-Powered CSV Schema-to-Code Generation
 
-**Learning Project: Building Real-Time ETL with Kafka, Flink, Polars, Iceberg, and Claude**
+**Automating Streaming ETL Adaptation to Schema Changes**
 
-A hands-on learning project exploring modern streaming data architecture. Uses schema evolution as the learning vehicle—schema changes trigger Claude to generate Flink SQL & Polars code, which are validated by GitHub Actions. First hands-on project diving into streaming systems from scratch.
+Addresses a real ad-tech operational challenge: frequent CSV schema changes require manual code generation, test creation, and reviews—leading to toil, quality variance, and bottlenecks. This project uses Claude AI to automatically generate Flink SQL, Polars transforms, and test code from CSV schema changes, validated through GitHub Actions. Result: reproducible, quality-uniform schema adaptations without manual rework.
 
 **Repository:** [`streaming-etl-handson`](https://github.com/Karasu1t/streaming-etl-handson)
 
@@ -10,17 +10,40 @@ A hands-on learning project exploring modern streaming data architecture. Uses s
 
 ## 日本語: プロジェクト概要
 
-**背景:** 11年のプラットフォームエンジニアリング経験を持つが、ストリーミングデータ領域は初心者。Kafka / Flink / Polars / Iceberg / Rust といった現代的なストリーミングスタックがどう組み合わさるのか、実践を通じて学びたい。
+**背景・課題:**
 
-**学習題材:** 広告プラットフォームのスキーマ変更を例として、以下を体系的に習得：
+広告プラットフォームが提供する CSV のカラム構成は、頻繁に変更される（月 1-2 回程度）。
+従来の対応プロセス：
 
-- **Flink SQL**: ストリームの状態管理と変換
-- **Polars (Rust)**: 型安全性を備えた高速列計算
-- **Iceberg**: スキーマ進化をサポートするテーブルフォーマット
-- **Claude API**: コード生成の自動化（draftから validationまで）
-- **GitHub Actions**: ストリーミングパイプラインのCI/CD
+1. カラム定義の修正（手動）
+2. テスト仕様書の作成（手動）
+3. コードレビュー・テスト実施
+4. 本番デプロイ
 
-**成果物:** スキーマ変更→Claude生成→構文check→単体テスト→Icebergスキーマ検証→PR報告、という一連のワークフローの実装と理解。
+**問題点：**
+
+- 修正作業が属人化している
+- 作業者や日時により、テスト内容や品質にばらつきが出る
+- 在席していないメンバーへの対応が難しい
+- 各回のスキーマ変更で同じ作業を繰り返す（DRY 原則違反）
+
+**ソリューション:**
+
+Claude AI を呼び出し、CSV のカラム定義（old + new）をもとに以下を自動生成：
+
+- **Flink SQL**: ストリーム変換ロジック
+- **Polars code**: 型安全な schema validation
+- **Unit tests**: テスト仕様の自動作成
+- **Iceberg DDL**: テーブルスキーマ定義
+
+生成されたコードは GitHub Actions で自動検証（構文check + pytest + schema validation）を経て PR に上げられる。
+
+**技術スタック：**
+
+- **Claude API**: 「CSV schema → 構造化コード」の核
+- **Flink + Iceberg**: 既存の streaming ETL パイプライン（CSV ingestion → transformation）
+- **Polars (Rust)**: Transform の型安全性
+- **GitHub Actions**: 生成コードの自動検証
 
 ---
 
@@ -105,52 +128,37 @@ graph LR
 
 ---
 
-## Learning Goals
+## Expected Outcomes
 
-**Primary Objective**: Hands-on mastery of modern streaming data architecture
+**Primary Objective**: Automate CSV schema change adaptation with consistent quality
 
-- **Understand Flink**: Stateful stream processing, event-time semantics, connectors
-- **Master Polars**: Type-safe columnar transforms, integration with Rust ecosystem
-- **Learn Iceberg**: Schema evolution, portable table format, Flink integration
-- **Practice Claude API**: Using AI to generate streaming code candidates
-- **Implement CI/CD**: Validating generated code through syntax checks, unit tests, schema checks
-
-**Real-World Context**: Schema changes are common in ad-tech; automating response to those changes (via code generation) is a practical learning vehicle that touches all parts of the stack.
+- **Quality Uniformity**: Eliminate human variance; consistent test coverage via automated test generation
+- **Reproducibility**: Every schema change follows the same workflow; no silos
+- **Reduced Toil**: Human reviewers focus on logic correctness, not mechanical code generation
+- **Knowledge Decentralization**: Any team member can handle schema changes using this workflow
 
 ---
 
-## Technology Rationale
+## Why Claude Powers This
 
-### Flink SQL
+### Claude API (Core Innovation)
 
-- **Why**: Real-time stream processing; native Iceberg connector; stateful transformations
-- **Expertise**: First hands-on project with Flink; distributed streaming foundation
+- **What it does**: Understands CSV schema changes; generates valid Flink SQL + Polars code + test cases
+- **Role**: Converts manual code generation task into reproducible dialogue
+- **Validation**: All Claude outputs are syntax-checked + pytest'd + schema-validated before merge (never autonomous)
+- **Quality**: Eliminates variance in generated code and test coverage across all schema changes
 
-### Polars (Rust)
+### Supporting Infrastructure
 
-- **Why**: Type-safe, columnar, high-performance; excellent for schema-driven ETL
-- **Benefit**: Rust's compile-time safety + Python's ease; natural fit for CSV→table transformations
-
-### Iceberg
-
-- **Why**: Built for schema evolution; portable table format; native Flink support
-- **Advantage**: Handles breaking schema changes gracefully; open format (not vendor-locked)
-
-### Claude API
-
-- **Why**: Context-aware; understands SQL and data pipelines; generates schema-compatible code
-- **Not**: Fully autonomous; all outputs are validated by syntax check + tests before merge
-
-### GitHub Actions
-
-- **Why**: Native Git integration; proof-of-execution visible in PR; no external service needed
-- **Outcome**: Each schema change has complete audit trail (commit, PR, checks, test logs)
+- **Flink SQL + Iceberg**: Existing streaming ETL pipeline (handles CSV ingestion and real-time transformation)
+- **Polars (Rust)**: Type-safe transforms; Rust's compile-time checks catch schema mismatches
+- **GitHub Actions**: Automated validation gate; syntax check + pytest + Iceberg schema check
 
 ---
 
 ## Roadmap
 
-### Phase 1: Foundation (Planned — 12 days)
+### Phase 1: Foundation (Planned)
 
 - [ ] Flink SQL job scaffold (source → transform → sink)
 - [ ] Polars transform library with schema validation
@@ -268,38 +276,34 @@ See [docs/01_setup.md](docs/01_setup.md) for detailed instructions.
 
 ## Design Philosophy
 
-1. **Learn by Building**: Not studying documentation alone—build a complete end-to-end system
-2. **Real Constraints**: Schema changes are real; code generation must be validated by real tests
-3. **Type Safety**: Use Rust's type system as a teaching tool; catch schema mismatches at compile time
-4. **Auditability**: Every change is a Git commit, PR, and CI log—proof of learning progression
-5. **AI as Accelerator**: Claude helps generate scaffolding; testing ensures correctness
-6. **Deliberate Complexity**: Flink + Polars + Iceberg are genuinely complex—the difficulty is the point
+1. **Automation, Not Manual Toil**: CSV spec → Claude → validated code, no copy-paste
+2. **Validation Before Trust**: Syntax check + pytest + schema checks; Claude is draft generator only
+3. **Decentralized Knowledge**: Any team member can execute the workflow; reduces silos
+4. **Audit Trail for Compliance**: Every change is Git commit + PR + CI logs; traceable
+5. **Type Safety as Quality Gate**: Polars (Rust) + Iceberg schema validation catch errors early
+6. **Deliberate Tech Choices**: Each technology solves a specific operational problem
 
 ---
 
 ## About
 
-**What This Is**: A **deliberate hands-on learning project** to master streaming data architecture from scratch.
+**What This Is**: A practical solution to a recurring operational challenge in ad-tech.
 
-**Background**: 11 years in platform engineering (ad-tech, data infrastructure); now upskilling in modern streaming systems.
+**The Core Problem**: CSV schema changes require manual code generation, test creation, and reviews—creating toil and quality variance.
 
-**Why This Stack**:
+**The Core Solution**: Claude AI automatically generates Flink SQL, Polars transforms, and unit tests from CSV schema specs, validated through GitHub Actions.
 
-- **Kafka**: De facto standard for event streaming
-- **Flink**: Best-in-class stateful stream processor with Iceberg support
-- **Polars**: Modern columnar compute with Rust safety guarantees
-- **Iceberg**: Streaming + batch; handles schema evolution gracefully
-- **Claude API**: Exploring AI-assisted code generation patterns
+**Why It Matters**:
 
-**Learning Outcomes** (documented via code, tests, and CI logs):
+- Demonstrates ability to identify and solve real operational bottlenecks
+- Shows how AI (Claude) can be integrated into production workflows with validation gates
+- Proves that automation doesn't sacrifice quality—consistent tests ensure correctness
 
-- End-to-end streaming pipeline architecture
-- Stateful transformations and event-time semantics
-- Type-safe ETL with Rust + Polars
-- Schema evolution patterns with Iceberg
-- CI/CD validation for data workloads
+**Technology**:
 
-**Target**: Switzerland/EU data engineering roles (2028). This project demonstrates deep learning in a modern technology stack.
+- Claude for structured code generation from schema definitions
+- Flink + Polars + Iceberg for streaming ETL execution
+- GitHub Actions for automated validation
 
 ---
 
