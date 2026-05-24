@@ -32,7 +32,7 @@ PHASE 0.5（AWS Glue - 本番志向）
 │  ├─ s3://etl-xxx/processed/output.parquet                  │
 │  └─ s3://etl-xxx/metadata/                                 │
 │         ↓ (S3 Event Trigger)                               │
-│ AWS Glue Job (PySpark + Polars)                            │
+│ AWS Glue Job (PySpark)                                     │
 │         ↓                                                  │
 │ AWS Glue Catalog ← メタデータ自動登録                      │
 │  └─ Table: streaming_etl_schema                            │
