@@ -18,7 +18,7 @@ resource "aws_cloudwatch_event_rule" "scheduled_glue_rule" {
 resource "aws_cloudwatch_event_target" "glue_job_target" {
   rule      = aws_cloudwatch_event_rule.scheduled_glue_rule.name
   target_id = "GlueJobTarget"
-  arn       = "arn:aws:glue:${data.aws_caller_identity.current.region}:${data.aws_caller_identity.current.account}:job/${var.glue_job_name}"
+  arn       = "arn:aws:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:job/${var.glue_job_name}"
   role_arn  = aws_iam_role.eventbridge_role.arn
 }
 
@@ -63,12 +63,13 @@ resource "aws_iam_role_policy" "eventbridge_policy" {
           "glue:StartJobRun"
         ]
         Resource = [
-          "arn:aws:glue:${data.aws_caller_identity.current.account}:job/${var.glue_job_name}"
+          "arn:aws:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:job/${var.glue_job_name}"
         ]
       }
     ]
   })
 }
 
-# Data source to get current AWS account ID
+# Data sources to get current AWS account ID and region
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
