@@ -36,6 +36,23 @@ resource "aws_glue_job" "etl_job" {
   )
 
   depends_on = [
-    aws_iam_role_policy.glue_job_policy
+    aws_iam_role_policy.glue_job_policy,
+    aws_s3_object.glue_script
   ]
+}
+
+# Upload Glue script to S3
+resource "aws_s3_object" "glue_script" {
+  count  = var.glue_script_source_path != null ? 1 : 0
+  bucket = var.output_bucket
+  key    = "scripts/glue_job.py"
+  source = var.glue_script_source_path
+  etag   = filemd5(var.glue_script_source_path)
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "glue_job_script"
+    }
+  )
 }

@@ -28,6 +28,12 @@ variable "script_location" {
   type        = string
 }
 
+variable "glue_script_source_path" {
+  description = "Local path to Glue Job script"
+  type        = string
+  default     = null
+}
+
 variable "glue_version" {
   description = "Glue version"
   type        = string
