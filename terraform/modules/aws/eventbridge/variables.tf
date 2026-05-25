@@ -8,11 +8,6 @@ variable "project" {
   type        = string
 }
 
-variable "raw_bucket_name" {
-  description = "S3 raw bucket name"
-  type        = string
-}
-
 variable "glue_job_name" {
   description = "Glue Job name"
   type        = string

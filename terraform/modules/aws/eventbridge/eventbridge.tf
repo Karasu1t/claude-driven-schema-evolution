@@ -1,27 +1,13 @@
-# EventBridge rule for S3 → Glue Job trigger
-resource "aws_cloudwatch_event_rule" "s3_put_rule" {
-  name        = "${var.environment}-${var.project}-s3-put-rule"
-  description = "Trigger Glue Job on S3 raw bucket PUT"
-
-  event_pattern = jsonencode({
-    source      = ["aws.s3"]
-    detail-type = ["Object Created"]
-    detail = {
-      bucket = {
-        name = [var.raw_bucket_name]
-      }
-      object = {
-        key = [{
-          prefix = "raw/"
-        }]
-      }
-    }
-  })
+# EventBridge rule for scheduled Glue Job execution (daily at 6 AM UTC)
+resource "aws_cloudwatch_event_rule" "scheduled_glue_rule" {
+  name                = "${var.environment}-${var.project}-scheduled-glue-rule"
+  description         = "Trigger Glue Job daily at 6 AM UTC"
+  schedule_expression = "cron(0 6 * * ? *)" # Every day at 6 AM UTC
 
   tags = merge(
     var.tags,
     {
-      Name        = "${var.environment}-${var.project}-s3-put-rule"
+      Name        = "${var.environment}-${var.project}-scheduled-glue-rule"
       Environment = var.environment
       Project     = var.project
     }
@@ -30,21 +16,10 @@ resource "aws_cloudwatch_event_rule" "s3_put_rule" {
 
 # EventBridge target: Glue Job
 resource "aws_cloudwatch_event_target" "glue_job_target" {
-  rule      = aws_cloudwatch_event_rule.s3_put_rule.name
+  rule      = aws_cloudwatch_event_rule.scheduled_glue_rule.name
   target_id = "GlueJobTarget"
-  arn       = "arn:aws:glue:${data.aws_caller_identity.current.account}:job/${var.glue_job_name}"
+  arn       = "arn:aws:glue:${data.aws_caller_identity.current.region}:${data.aws_caller_identity.current.account}:job/${var.glue_job_name}"
   role_arn  = aws_iam_role.eventbridge_role.arn
-
-  input_transformer {
-    input_paths = {
-      bucket = "$.detail.bucket.name"
-      key    = "$.detail.object.key"
-    }
-    input_template = jsonencode({
-      "--INPUT_BUCKET"  = "<bucket>"
-      "--OUTPUT_BUCKET" = "<bucket>"
-    })
-  }
 }
 
 # IAM role for EventBridge to invoke Glue Job
