@@ -184,7 +184,7 @@ Status: ✅ All SUCCEEDED
 **Output:** Enterprise-grade data governance
 Gate -->|"❌ Failed"| FixNeeded["Fix & Re-push"]
 
-```
+````
 
 ---
 
@@ -242,7 +242,7 @@ aws glue start-job-run --job-name dev-karasuit-schema-evolution-etl --region ap-
 
 # 5. Check output
 aws s3 ls s3://dev-karasuit-processed-bucket/processed/ --recursive
-```
+````
 
 ---
 
@@ -289,13 +289,13 @@ claude-driven-schema-evolution/
 
 ## Cost Estimation (Monthly)
 
-| Service | Cost | Notes |
-|---------|------|-------|
-| Glue | $0.75 | 1 DPU-hour/day |
-| Lambda | <$0.01 | 1 invocation/day |
-| S3 | <$1 | Sample data |
-| EventBridge | <$0.01 | Free tier |
-| **Total** | **~$2-3** | Production-ready |
+| Service     | Cost      | Notes            |
+| ----------- | --------- | ---------------- |
+| Glue        | $0.75     | 1 DPU-hour/day   |
+| Lambda      | <$0.01    | 1 invocation/day |
+| S3          | <$1       | Sample data      |
+| EventBridge | <$0.01    | Free tier        |
+| **Total**   | **~$2-3** | Production-ready |
 
 ---
 
@@ -329,6 +329,7 @@ MIT License - see LICENSE file
 **Target:** 2028 EU/Switzerland data engineering roles
 
 **Key Evidence:**
+
 - Production AWS architecture (Glue + Lambda + EventBridge)
 - Infrastructure as Code (Terraform)
 - Hands-on cloud data engineering
