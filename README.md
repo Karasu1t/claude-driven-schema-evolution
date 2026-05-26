@@ -133,25 +133,23 @@ Status: ✅ All Components LIVE and OPERATIONAL
 ### Quick Start
 
 ```bash
-# 1. Clone
+# Clone and deploy
 git clone https://github.com/Karasu1t/claude-driven-schema-evolution.git
 cd claude-driven-schema-evolution
 
-# 2. Deploy infrastructure
+# Deploy infrastructure
 cd terraform/env/dev/aws
 terraform init
 terraform plan
 terraform apply
 
-# 3. Upload sample data
-aws s3 cp ../../data/sample_input.csv s3://dev-karasuit-raw-bucket/raw/
+# Upload CSV and trigger Glue Job
+aws s3 cp <local_csv_path> s3://<raw-bucket>/raw/
+aws glue start-job-run --job-name <glue-job-name> --region <region>
 
-# 4. Trigger Glue Job
-aws glue start-job-run --job-name dev-karasuit-schema-evolution-etl --region ap-northeast-1
-
-# 5. Check output
-aws s3 ls s3://dev-karasuit-processed-bucket/processed/ --recursive
-````
+# Check output
+aws s3 ls s3://<processed-bucket>/
+```
 
 ---
 
@@ -208,24 +206,7 @@ claude-driven-schema-evolution/
 
 ---
 
-## Troubleshooting
-
-### Glue Job Permission Error
-
-```bash
-aws iam get-role-policy \
-  --role-name dev-karasuit-glue-job-role \
-  --policy-name dev-karasuit-glue-job-policy
-```
-
-### CSV Not Found
-
-```bash
-aws s3 cp data/sample_input.csv s3://dev-karasuit-raw-bucket/raw/
-```
-
----
-
 ## License
 
 MIT License - see LICENSE file
+````
