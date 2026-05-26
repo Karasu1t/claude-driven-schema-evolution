@@ -1,10 +1,12 @@
-# Claude-Powered CSV Schema-to-Code Generation
+# Claude-Driven Schema Evolution for Data Engineering
 
-**Automating Streaming ETL Adaptation to Schema Changes**
+**AI-Assisted ETL with Schema Evolution on AWS**
 
-Addresses a real ad-tech operational challenge: frequent CSV schema changes require manual code generation, test creation, and reviews—leading to toil, quality variance, and bottlenecks. This project uses Claude AI to automatically generate Flink SQL, Polars transforms, and test code from CSV schema changes, validated through GitHub Actions. Result: reproducible, quality-uniform schema adaptations without manual rework.
+A portfolio project demonstrating cloud-native data engineering practices: CSV schema changes → AWS Glue transformation → Parquet output. Phase 0.5 establishes a complete, production-ready ETL pipeline on AWS. Phase 1 adds Claude API integration for automatic schema evolution handling. Phase 2 migrates to Apache Iceberg for advanced data governance.
 
-**Repository:** [`streaming-etl-handson`](https://github.com/Karasu1t/streaming-etl-handson)
+**Target Audience:** Data engineers applying for EU/Switzerland 2028 roles seeking hands-on cloud architecture + AI integration proof.
+
+**Repository:** [`claude-driven-schema-evolution`](https://github.com/Karasu1t/claude-driven-schema-evolution)
 
 ---
 
@@ -12,310 +14,322 @@ Addresses a real ad-tech operational challenge: frequent CSV schema changes requ
 
 **背景・課題:**
 
-広告プラットフォームが提供する CSV のカラム構成は、頻繁に変更される（月 1-2 回程度）。
+ビデオプラットフォームが提供するデータフィードの CSV スキーマは、頻繁に変更される（新カラム追加など）。
 従来の対応プロセス：
 
-1. カラム定義の修正（手動）
-2. テスト仕様書の作成（手動）
-3. コードレビュー・テスト実施
-4. 本番デプロイ
+1. CSV スキーマ変更を検出（手動）
+2. PySpark 変換コードを修正（手動）
+3. ローカルテスト実施
+4. AWS Glue Job を再デプロイ
 
 **問題点：**
 
-- 修正作業が属人化している
-- 作業者や日時により、テスト内容や品質にばらつきが出る
-- 在席していないメンバーへの対応が難しい
-- 各回のスキーマ変更で同じ作業を繰り返す（DRY 原則違反）
+- スキーマ変更のたびに手動コード修正が発生
+- テスト・検証が属人化している
+- デプロイプロセスに時間がかかる
+- スキーマ進化への対応が遅い
 
 **ソリューション:**
 
-Claude AI を呼び出し、CSV のカラム定義（old + new）をもとに以下を自動生成：
+本プロジェクトは 3 フェーズで構成：
 
-- **Flink SQL**: ストリーム変換ロジック
-- **Polars code**: 型安全な schema validation
-- **Unit tests**: テスト仕様の自動作成
-- **Iceberg DDL**: テーブルスキーマ定義
+**Phase 0.5 (✅ 完了)**: AWS Glue ベースの本番パイプライン確立
 
-生成されたコードは GitHub Actions で自動検証（構文check + pytest + schema validation）を経て PR に上げられる。
+- EventBridge でスケジュール実行
+- Lambda で Glue Job トリガー
+- S3 (Parquet) へ自動出力
+- 完全に動作するシステム完成
 
-**技術スタック：**
+**Phase 1 (次)**: スキーマ進化対応システム構築
 
-- **Claude API**: 「CSV schema → 構造化コード」の核
-- **Flink + Iceberg**: 既存の streaming ETL パイプライン（CSV ingestion → transformation）
-- **Polars (Rust)**: Transform の型安全性
-- **GitHub Actions**: 生成コードの自動検証
+- 新カラム追加に対応した PySpark ロジック実装
+- Glue Job を動的スキーマ対応に拡張
+- E2E テストで検証
 
----
+**Phase 2**: Claude API 統合（運用自動化）
 
-## What This Does
+- Claude でスキーマ変更を自動検出
+- PySpark 変換コード自動生成
+- 検証フロー自動化
 
-1. **Detect & Input**: Platform schema change notification (e.g., "Column X added")
-2. **Acquire Spec**: Download CSV with updated column definitions
-3. **Interactive Fix**: Claude API dialogue to generate Flink SQL & Polars transform updates
-4. **Commit & PR**: Push changes, create PR
-5. **Validate & Report**: GitHub Actions runs syntax check + pytest + Iceberg schema validation, surfaces results in PR comment
+**技術スタック (Phase 0.5 完了時点)：**
 
-**Key Outcome:** Schema change → Claude generates code → validate with syntax check + pytest + Iceberg checks → proof in PR, all within one workflow.
-
----
-
-## Technical Stack
-
-| Component          | Purpose                     | Why                                                               |
-| ------------------ | --------------------------- | ----------------------------------------------------------------- |
-| **Flink SQL**      | Streaming transformation    | Real-time event processing; stateful operators; Iceberg connector |
-| **Polars (Rust)**  | High-performance transforms | Columnar compute; type-safe; perfect for schema-driven pipelines  |
-| **Iceberg**        | Streaming table format      | Schema evolution support; portable; built for Flink integration   |
-| **Claude API**     | Interactive job adaptation  | Understands SQL & data lineage; generates schema-aware transforms |
-| **GitHub Actions** | CI/CD pipeline              | Proof & auditability; validates Flink SQL + Polars code           |
-| **Python + Rust**  | CLI tool (`ut-etl` command) | Orchestrates CSV spec, Claude dialogue, validation jobs           |
+- **AWS Glue**: PySpark ベースの ETL 実行エンジン
+- **AWS Lambda**: スケジューラー (EventBridge) と Glue Job の仲介層
+- **AWS EventBridge**: 毎日 6 AM UTC の自動トリガー
+- **AWS S3**: データレイク (raw bucket + processed bucket)
+- **Parquet**: 列指向データフォーマット（中期）
+- **Apache Iceberg**: テーブルフォーマット（Phase 2）
+- **Terraform**: Infrastructure as Code（全 AWS リソース）
 
 ---
 
-## Why These Choices
+## What This Does (Phase 0.5 - Live)
 
-| Concern              | Solution                                                      | Trade-off                                   |
-| -------------------- | ------------------------------------------------------------- | ------------------------------------------- |
-| **Quality variance** | AI-assisted + syntax validation + pytest → rules enforcement  | Requires comprehensive test suite           |
-| **Reproducibility**  | Code-as-spec (CSV) + Flink/Polars + Git history               | Streaming complexity; local testing setup   |
-| **Governance**       | PR + CI gates before merge; Claude output is draft, not final | Not fully autonomous; human review required |
-| **Type Safety**      | Polars (Rust) + schema validation + Iceberg checks            | Adds Rust dependency; learning curve        |
+```
+Daily Workflow (自動実行):
+
+6:00 AM UTC
+  ↓
+EventBridge Cron Rule トリガー
+  ↓
+Lambda Function (dev-karasuit-glue-job-trigger)
+  ├─ Glue Job 起動リクエスト
+  └─ return JobRunId
+  ↓
+AWS Glue Job (dev-karasuit-schema-evolution-etl)
+  ├─ S3 raw bucket から CSV 読み込み
+  ├─ スキーマ推測 (inferSchema=true)
+  ├─ 必須カラム検証 + 追加（足りない場合）
+  ├─ メタデータ添付 (processed_at, glue_job_run_id)
+  └─ Parquet 書き込み (snappy 圧縮)
+  ↓
+S3 processed bucket
+  ├─ part-00000-*.snappy.parquet (Worker #0)
+  ├─ part-00001-*.snappy.parquet (Worker #1)
+  └─ spark-logs/ (実行ログ)
+
+Status: ✅ All SUCCEEDED
+```
 
 ---
 
-## Workflow Diagram
+## Technical Stack (Phase 0.5)
 
-```mermaid
-graph LR
-    Notify["📢 Platform Change<br/>Notified"] -->|"Column X updated"| Acquire["📥 Download CSV<br/>Column Spec"]
-    Acquire --> Dialog["💬 Claude Dialogue<br/>Flink + Polars Fix"]
-    Dialog -->|"Flink SQL<br/>& Polars code"| Commit["📝 Commit & Push"]
-    Commit --> PR["🔀 Create PR"]
-    PR -->|"Trigger"| GHA["⚙️ GitHub Actions"]
-    GHA -->|"1. Syntax"| Syntax["Flink SQL parse<br/>Rust check"]
-    Syntax -->|"2. Unit Test"| Test["pytest on Polars<br/>transformations"]
-    Test -->|"3. Schema"| Schema["Iceberg schema<br/>validation"]
-    Schema -->|"✅/❌"| Comment["💬 PR Comment<br/>with Results"]
-    Comment --> Gate{Merge?}
-    Gate -->|"✅ All Green"| Merge["✓ Ready"]
-    Gate -->|"❌ Failed"| FixNeeded["Fix & Re-push"]
+| Component                           | Purpose                               | Status     |
+| ----------------------------------- | ------------------------------------- | ---------- |
+| **AWS Glue 4.0**                    | PySpark ETL execution engine          | ✅ LIVE    |
+| **Lambda (Python 3.12)**            | Glue Job trigger via Boto3            | ✅ LIVE    |
+| **EventBridge (CloudWatch Events)** | Daily cron schedule (6 AM UTC)        | ✅ LIVE    |
+| **S3 (2 buckets)**                  | Raw CSV input + Parquet output        | ✅ LIVE    |
+| **Parquet (snappy)**                | Columnar data format with compression | ✅ LIVE    |
+| **Terraform**                       | IaC for all AWS resources             | ✅ LIVE    |
+| **Apache Iceberg**                  | Table format for Phase 2              | 🔄 Planned |
+| **Claude API**                      | Schema evolution automation (Phase 2) | 🔄 Planned |
+
+---
+
+## Why This Architecture
+
+| Decision                 | Rationale                                       | Trade-off                                      |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------------- |
+| **AWS Glue**             | Managed PySpark, no cluster ops                 | Higher cost than self-managed Spark            |
+| **Lambda + EventBridge** | Serverless, reliable scheduling                 | Not stream-driven (daily batch only)           |
+| **Parquet**              | Efficient storage, widespread tooling           | Manual schema evolution (Phase 1 solves)       |
+| **Terraform**            | Infrastructure reproducibility, version control | Steep learning curve for beginners             |
+| **2-Worker Glue**        | Balanced cost/throughput for prototype          | Overkill for 100-row sample (production-ready) |
+
+---
+
+## Phase Roadmap
+
+### Phase 0.5 ✅ (COMPLETE)
+
+**Deliverables:**
+
+- ✅ AWS Glue ETL pipeline running daily
+- ✅ Lambda auto-triggers Glue Job
+- ✅ CSV → Parquet transformation verified
+- ✅ S3 data lake structure in place
+- ✅ Terraform IaC for all resources
+- ✅ End-to-end test passed (100 rows)
+
+**Output:** Fully operational, production-ready data pipeline
+
+---
+
+### Phase 1 (NEXT - Schema Evolution System)
+
+**Goal:** Build complete schema evolution handling without Claude
+
+**Deliverables:**
+
+- New CSV with 8 columns (subscriber_delta, dislikes added)
+- Updated Glue Job with dynamic column handling
+- E2E test: verify new columns processed correctly
+- Terraform updated
+- Git commit with proof
+
+**Output:** System that adapts to schema changes (manual code update)
+
+---
+
+### Phase 2 (FUTURE - Claude Automation)
+
+**Goal:** Automate Phase 1 with Claude API
+
+**Deliverables:**
+
+- Claude API integration for schema change detection
+- Auto-generate PySpark transformation code
+- SKILL command: `claude fix-etl --schema <changes.json>`
+- Automated validation workflow
+- AWS deployment automation
+
+**Output:** One-command schema evolution handling
+
+---
+
+### Phase 3 (FUTURE - Iceberg Migration)
+
+**Goal:** Upgrade to Apache Iceberg for enterprise features
+
+**Deliverables:**
+
+- Migration: Parquet → Iceberg tables
+- Glue Catalog metadata centralization
+- Time Travel support (point-in-time queries)
+- ACID transaction handling
+
+**Output:** Enterprise-grade data governance
+Gate -->|"❌ Failed"| FixNeeded["Fix & Re-push"]
+
 ```
 
 ---
 
 ## Scope
 
-### In Scope ✅
+### Phase 0.5 Implemented ✅
 
-- **Spec Handling**: CSV download and parsing
-- **Claude Integration**: Interactive Flink SQL & Polars transform generation
-- **Flink Jobs**: Streaming SQL scaffolds, schema-aware transformations
-- **Polars Transforms**: Python/Rust implementations with type hints
-- **GitHub Actions**: PR-triggered validation (syntax → pytest → Iceberg checks)
-- **PR Reporting**: Surfaces test results, schema validation errors
-- **Local Dev**: Reproducible setup with sample CSV & Iceberg table schema
+- ✅ AWS Glue ETL pipeline (PySpark-based)
+- ✅ Lambda trigger integration
+- ✅ EventBridge cron scheduling
+- ✅ S3 data lake structure
+- ✅ Terraform IaC for all resources
+- ✅ End-to-end CSV → Parquet pipeline
 
-### Out of Scope ❌
+### Phase 1 Planned (Schema Evolution)
 
-- Automatic schema change detection (assumed notified)
-- Google Drive API integration (CSV download is manual or via URL)
-- Kafka cluster provisioning or management
-- Full data lineage tracing or impact analysis
-- Production deployment automation
-- Real Kafka/Flink cluster setup (Phase 1 uses local mock)
+- Glue Job with dynamic column handling
+- 8-column CSV processing
+- E2E testing framework
 
-**Assumption:** This is a **personal portfolio** demonstrating **AI-assisted streaming ETL workflows**. Phase 1 focuses on code generation, validation, and local testing. Phase 2 adds Kafka integration.
+### Phase 2 Planned (Claude Integration)
 
----
-
-## Expected Outcomes
-
-**Primary Objective**: Automate CSV schema change adaptation with consistent quality
-
-- **Quality Uniformity**: Eliminate human variance; consistent test coverage via automated test generation
-- **Reproducibility**: Every schema change follows the same workflow; no silos
-- **Reduced Toil**: Human reviewers focus on logic correctness, not mechanical code generation
-- **Knowledge Decentralization**: Any team member can handle schema changes using this workflow
+- Claude API for schema change detection
+- Auto-code generation
+- Validation workflows
 
 ---
 
-## Why Claude Powers This
+## Getting Started
 
-### Claude API (Core Innovation)
+### Prerequisites
 
-- **What it does**: Understands CSV schema changes; generates valid Flink SQL + Polars code + test cases
-- **Role**: Converts manual code generation task into reproducible dialogue
-- **Validation**: All Claude outputs are syntax-checked + pytest'd + schema-validated before merge (never autonomous)
-- **Quality**: Eliminates variance in generated code and test coverage across all schema changes
+- AWS Account with credentials configured
+- Terraform >= 1.0
+- AWS CLI v2
 
-### Supporting Infrastructure
-
-- **Flink SQL + Iceberg**: Existing streaming ETL pipeline (handles CSV ingestion and real-time transformation)
-- **Polars (Rust)**: Type-safe transforms; Rust's compile-time checks catch schema mismatches
-- **GitHub Actions**: Automated validation gate; syntax check + pytest + Iceberg schema check
-
----
-
-## Roadmap
-
-### Phase 1: Foundation (Planned)
-
-- [ ] Flink SQL job scaffold (source → transform → sink)
-- [ ] Polars transform library with schema validation
-- [ ] Python CLI tool (`ut-etl` command)
-- [ ] Claude API integration (Flink SQL & Polars code generation)
-- [ ] GitHub Actions workflow (syntax check + pytest + Iceberg validation)
-- [ ] Sample CSV spec file (old & updated schemas)
-- [ ] Iceberg table setup & schema registry
-- [ ] End-to-end demo + screenshots
-
-### Phase 2: Streaming Integration (Future)
-
-- [ ] Kafka broker setup & topic management
-- [ ] Flink Kafka connector (source)
-- [ ] Google Drive API integration (auto-download CSV specs)
-- [ ] Advanced Polars transforms (aggregations, joins)
-- [ ] Integration test suite (Docker + embedded Kafka)
-
-### Phase 3: Production Readiness (Future)
-
-- [ ] Kubernetes deployment (Flink on K8s)
-- [ ] Multi-environment support (dev/staging/prod)
-- [ ] Metrics & observability (Prometheus + Grafana)
-- [ ] RBAC & secrets management
-
----
-
-## Key Files (Future)
-
-```
-.
-├── README.md                    (this file)
-├── LICENSE                      (MIT)
-├── .gitignore
-├── .github/
-│   └── workflows/
-│       ├── pr-validate.yml      (syntax check + pytest + Iceberg on PR)
-│       └── schema-registry.yml  (optional: track Iceberg schema versions)
-├── flink_jobs/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/
-│   │   │   │   └── com/etl/
-│   │   │   │       ├── SourceJob.java
-│   │   │   │       ├── TransformJob.java
-│   │   │   │       └── IcebergSinkJob.java
-│   │   │   └── resources/
-│   │   │       └── flink-config.yaml
-│   │   └── test/
-│   │       └── java/
-├── polars_transforms/
-│   ├── Cargo.toml               (Rust config)
-│   ├── src/
-│   │   ├── lib.rs               (main transforms)
-│   │   ├── schema.rs            (schema validation)
-│   │   └── transforms.rs        (columnar ops)
-│   └── tests/
-│       └── transform_tests.py   (pytest for Polars)
-├── src/
-│   ├── ut_etl/
-│   │   ├── cli.py               (entry point: ut-etl command)
-│   │   ├── claude_agent.py      (Claude API caller)
-│   │   ├── csv_loader.py        (CSV parsing)
-│   │   ├── flink_generator.py   (Flink SQL generation)
-│   │   └── polars_generator.py  (Polars transform generation)
-│   └── tests/
-│       ├── test_claude_agent.py
-│       ├── test_csv_loader.py
-│       └── test_generators.py
-├── specs/
-│   ├── sample_columns.csv       (mock: old ad platform schema)
-│   └── sample_columns_updated.csv (mock: new schema with added columns)
-├── iceberg/
-│   ├── schema.yaml              (Iceberg table metadata)
-│   └── fixtures/                (sample data for testing)
-└── docs/
-    ├── 01_setup.md
-    ├── 02_flink_sql_guide.md
-    ├── 03_polars_transforms.md
-    └── 04_claude_prompts.md
-```
-
----
-
-## Getting Started (Placeholder)
+### Quick Start
 
 ```bash
-# Clone repo
-git clone https://github.com/Karasu1t/etl-schema-evolution-claude.git
-cd etl-schema-evolution-claude
+# 1. Clone
+git clone https://github.com/Karasu1t/claude-driven-schema-evolution.git
+cd claude-driven-schema-evolution
 
-# Create Python venv
-python3 -m venv venv
-source venv/bin/activate
+# 2. Deploy infrastructure
+cd terraform/env/dev/aws
+terraform init
+terraform plan
+terraform apply
 
-# Install Python dependencies
-pip install -r requirements.txt
+# 3. Upload sample data
+aws s3 cp ../../data/sample_input.csv s3://dev-karasuit-raw-bucket/raw/
 
-# Build Rust Polars transforms (optional, or use pre-built)
-cd polars_transforms && cargo build --release && cd ..
+# 4. Trigger Glue Job
+aws glue start-job-run --job-name dev-karasuit-schema-evolution-etl --region ap-northeast-1
 
-# Set Claude API key
-export CLAUDE_API_KEY="your-key-here"
-
-# Run demo (future)
-python src/ut_etl/cli.py \
-  --csv specs/sample_columns_updated.csv \
-  --flink-jobs flink_jobs/ \
-  --polars-transforms polars_transforms/
+# 5. Check output
+aws s3 ls s3://dev-karasuit-processed-bucket/processed/ --recursive
 ```
 
-See [docs/01_setup.md](docs/01_setup.md) for detailed instructions.
+---
+
+## Project Structure
+
+```
+claude-driven-schema-evolution/
+├── README.md (this file)
+├── docs/
+│   └── PHASE_0.5_AWS_DESIGN.md (architecture details)
+├── terraform/
+│   ├── modules/
+│   │   └── aws/
+│   │       ├── glue_job/
+│   │       ├── lambda_trigger/
+│   │       ├── eventbridge/
+│   │       ├── s3_raw_bucket/
+│   │       └── s3_processed_bucket/
+│   └── env/
+│       └── dev/aws/
+├── src/
+│   └── glue/
+│       └── glue_job.py
+├── data/
+│   └── sample_input.csv
+└── specs/
+    └── schema_v1.yaml
+```
 
 ---
 
-## Design Philosophy
+## Testing
 
-1. **Automation, Not Manual Toil**: CSV spec → Claude → validated code, no copy-paste
-2. **Validation Before Trust**: Syntax check + pytest + schema checks; Claude is draft generator only
-3. **Decentralized Knowledge**: Any team member can execute the workflow; reduces silos
-4. **Audit Trail for Compliance**: Every change is Git commit + PR + CI logs; traceable
-5. **Type Safety as Quality Gate**: Polars (Rust) + Iceberg schema validation catch errors early
-6. **Deliberate Tech Choices**: Each technology solves a specific operational problem
+### Phase 0.5 Test Results
+
+```
+✅ Glue Job: SUCCEEDED
+✅ Lambda Trigger: SUCCEEDED
+✅ EventBridge Schedule: ENABLED
+✅ CSV → Parquet: VERIFIED
+```
 
 ---
 
-## About
+## Cost Estimation (Monthly)
 
-**What This Is**: A practical solution to a recurring operational challenge in ad-tech.
+| Service | Cost | Notes |
+|---------|------|-------|
+| Glue | $0.75 | 1 DPU-hour/day |
+| Lambda | <$0.01 | 1 invocation/day |
+| S3 | <$1 | Sample data |
+| EventBridge | <$0.01 | Free tier |
+| **Total** | **~$2-3** | Production-ready |
 
-**The Core Problem**: CSV schema changes require manual code generation, test creation, and reviews—creating toil and quality variance.
+---
 
-**The Core Solution**: Claude AI automatically generates Flink SQL, Polars transforms, and unit tests from CSV schema specs, validated through GitHub Actions.
+## Troubleshooting
 
-**Why It Matters**:
+### Glue Job Permission Error
 
-- Demonstrates ability to identify and solve real operational bottlenecks
-- Shows how AI (Claude) can be integrated into production workflows with validation gates
-- Proves that automation doesn't sacrifice quality—consistent tests ensure correctness
+```bash
+aws iam get-role-policy \
+  --role-name dev-karasuit-glue-job-role \
+  --policy-name dev-karasuit-glue-job-policy
+```
 
-**Technology**:
+### CSV Not Found
 
-- Claude for structured code generation from schema definitions
-- Flink + Polars + Iceberg for streaming ETL execution
-- GitHub Actions for automated validation
+```bash
+aws s3 cp data/sample_input.csv s3://dev-karasuit-raw-bucket/raw/
+```
 
 ---
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License - see LICENSE file
 
 ---
 
-## Questions or Feedback?
+## Contact
 
-This repository is a **living portfolio**. If you spot ideas for improvement, feel free to discuss or fork.
+**Author:** Karasuit  
+**Target:** 2028 EU/Switzerland data engineering roles
 
-**Built with:** Claude + Flink + Polars + Iceberg + GitHub Actions
-**Last Updated:** May 2026
+**Key Evidence:**
+- Production AWS architecture (Glue + Lambda + EventBridge)
+- Infrastructure as Code (Terraform)
+- Hands-on cloud data engineering
+- AI integration roadmap (Phase 2: Claude API)
