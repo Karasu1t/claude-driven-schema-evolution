@@ -89,14 +89,14 @@ Status: ✅ All Components LIVE and OPERATIONAL
 
 ## Architecture Decisions
 
-| Decision                 | Implementation                              | Trade-offs                              |
-| ------------------------ | ------------------------------------------- | --------------------------------------- |
-| **AWS Glue**             | Managed PySpark ETL                         | Managed service cost vs self-hosted     |
-| **Lambda + EventBridge** | Serverless scheduling + job trigger         | No stream-driven processing (batch only) |
-| **Parquet**              | Columnar format with compression            | Manual schema evolution needed (v1.0)  |
-| **Terraform**            | Infrastructure as Code                      | Learning curve, but reproducibility    |
-| **2-Worker Cluster**     | Balanced cost/throughput for production     | Overkill for sample data, but realistic |
-Gate -->|"❌ Failed"| FixNeeded["Fix & Re-push"]
+| Decision                 | Implementation                          | Trade-offs                               |
+| ------------------------ | --------------------------------------- | ---------------------------------------- |
+| **AWS Glue**             | Managed PySpark ETL                     | Managed service cost vs self-hosted      |
+| **Lambda + EventBridge** | Serverless scheduling + job trigger     | No stream-driven processing (batch only) |
+| **Parquet**              | Columnar format with compression        | Manual schema evolution needed (v1.0)    |
+| **Terraform**            | Infrastructure as Code                  | Learning curve, but reproducibility      |
+| **2-Worker Cluster**     | Balanced cost/throughput for production | Overkill for sample data, but realistic  |
+| Gate -->                 | "❌ Failed"                             | FixNeeded["Fix & Re-push"]               |
 
 ````
 
