@@ -2,9 +2,7 @@
 
 **AI-Assisted ETL with Schema Evolution on AWS**
 
-A portfolio project demonstrating cloud-native data engineering practices: CSV schema changes → AWS Glue transformation → Parquet output. Phase 0.5 establishes a complete, production-ready ETL pipeline on AWS. Phase 1 adds Claude API integration for automatic schema evolution handling. Phase 2 migrates to Apache Iceberg for advanced data governance.
-
-**Target Audience:** Data engineers applying for EU/Switzerland 2028 roles seeking hands-on cloud architecture + AI integration proof.
+A practical data engineering project: CSV with changing schemas → AWS Glue (PySpark) transformation → Parquet output. Demonstrates production-ready cloud ETL architecture with potential AI integration for schema-change automation.
 
 **Repository:** [`claude-driven-schema-evolution`](https://github.com/Karasu1t/claude-driven-schema-evolution)
 
@@ -12,100 +10,68 @@ A portfolio project demonstrating cloud-native data engineering practices: CSV s
 
 ## 日本語: プロジェクト概要
 
-**背景・課題:**
+**背景:**
 
-ビデオプラットフォームが提供するデータフィードの CSV スキーマは、頻繁に変更される（新カラム追加など）。
-従来の対応プロセス：
+ビデオプラットフォームのデータフィードは CSV フォーマットで頻繁にスキーマ変更が発生する（カラム追加、削除など）。
+
+**現状の対応プロセス:**
 
 1. CSV スキーマ変更を検出（手動）
 2. PySpark 変換コードを修正（手動）
-3. ローカルテスト実施
+3. テスト実施
 4. AWS Glue Job を再デプロイ
 
-**問題点：**
+**このプロジェクトの実装:**
 
-- スキーマ変更のたびに手動コード修正が発生
-- テスト・検証が属人化している
-- デプロイプロセスに時間がかかる
-- スキーマ進化への対応が遅い
-
-**ソリューション:**
-
-本プロジェクトは 3 フェーズで構成：
-
-**Phase 0.5 (✅ 完了)**: AWS Glue ベースの本番パイプライン確立
-
-- EventBridge でスケジュール実行
-- Lambda で Glue Job トリガー
-- S3 (Parquet) へ自動出力
-- 完全に動作するシステム完成
-
-**Phase 1 (次)**: スキーマ進化対応システム構築
-
-- 新カラム追加に対応した PySpark ロジック実装
-- Glue Job を動的スキーマ対応に拡張
-- E2E テストで検証
-
-**Phase 2**: Claude API 統合（運用自動化）
-
-- Claude でスキーマ変更を自動検出
-- PySpark 変換コード自動生成
-- 検証フロー自動化
-
-**技術スタック (Phase 0.5 完了時点)：**
-
-- **AWS Glue**: PySpark ベースの ETL 実行エンジン
-- **AWS Lambda**: スケジューラー (EventBridge) と Glue Job の仲介層
-- **AWS EventBridge**: 毎日 6 AM UTC の自動トリガー
-- **AWS S3**: データレイク (raw bucket + processed bucket)
-- **Parquet**: 列指向データフォーマット（中期）
-- **Apache Iceberg**: テーブルフォーマット（Phase 2）
-- **Terraform**: Infrastructure as Code（全 AWS リソース）
+- ✅ **AWS Glue + Lambda + EventBridge**: 毎日 6 AM UTC に自動実行される本番 ETL パイプライン
+- ✅ **CSV → Parquet**: スキーマ推測 + 必須カラム検証 + 動的追加
+- ✅ **Terraform**: 全 AWS リソースを Infrastructure as Code で管理
+- 🔄 **拡張可能**: スキーマ変更時に Glue Job を修正・再デプロイするだけで対応可能
 
 ---
 
-## What This Does (Phase 0.5 - Live)
+## How It Works (Current Implementation)
 
 ```
-Daily Workflow (自動実行):
+Automated Daily Workflow:
 
 6:00 AM UTC
   ↓
-EventBridge Cron Rule トリガー
+EventBridge Cron Rule
   ↓
 Lambda Function (dev-karasuit-glue-job-trigger)
-  ├─ Glue Job 起動リクエスト
-  └─ return JobRunId
+  ├─ Calls: glue.start_job_run(JobName="dev-karasuit-schema-evolution-etl")
+  └─ Returns: JobRunId
   ↓
-AWS Glue Job (dev-karasuit-schema-evolution-etl)
-  ├─ S3 raw bucket から CSV 読み込み
-  ├─ スキーマ推測 (inferSchema=true)
-  ├─ 必須カラム検証 + 追加（足りない場合）
-  ├─ メタデータ添付 (processed_at, glue_job_run_id)
-  └─ Parquet 書き込み (snappy 圧縮)
+AWS Glue Job (PySpark 3.11 on 2× G.2X workers)
+  ├─ Reads CSV from S3 raw bucket
+  ├─ Schema inference (inferSchema=true)
+  ├─ Validates required columns + adds missing ones
+  ├─ Adds metadata (processed_at, glue_job_run_id)
+  └─ Writes Parquet (snappy compression)
   ↓
-S3 processed bucket
-  ├─ part-00000-*.snappy.parquet (Worker #0)
-  ├─ part-00001-*.snappy.parquet (Worker #1)
-  └─ spark-logs/ (実行ログ)
+S3 Processed Bucket
+  ├─ part-00000-*.snappy.parquet
+  ├─ part-00001-*.snappy.parquet
+  └─ spark-logs/
 
-Status: ✅ All SUCCEEDED
+Status: ✅ All Components LIVE and OPERATIONAL
 ```
 
 ---
 
-## Technical Stack (Phase 0.5)
+## Technical Stack
 
-| Component                           | Purpose                               | Status     |
-| ----------------------------------- | ------------------------------------- | ---------- |
-| **AWS Glue 4.0**                    | PySpark ETL execution engine          | ✅ LIVE    |
-| **Lambda (Python 3.12)**            | Glue Job trigger via Boto3            | ✅ LIVE    |
-| **EventBridge (CloudWatch Events)** | Daily cron schedule (6 AM UTC)        | ✅ LIVE    |
-| **S3 (2 buckets)**                  | Raw CSV input + Parquet output        | ✅ LIVE    |
-| **Parquet (snappy)**                | Columnar data format with compression | ✅ LIVE    |
-| **Terraform**                       | IaC for all AWS resources             | ✅ LIVE    |
-| **Apache Iceberg**                  | Table format for Phase 2              | 🔄 Planned |
-| **Claude API**                      | Schema evolution automation (Phase 2) | 🔄 Planned |
+| Component                | Purpose                                 | Status |
+| ------------------------ | --------------------------------------- | ------ |
+| **AWS Glue 4.0**         | PySpark ETL execution (2× G.2X workers) | ✅     |
+| **Lambda (Python 3.12)** | Job trigger via Boto3                   | ✅     |
+| **EventBridge**          | Daily cron schedule (6 AM UTC)          | ✅     |
+| **S3 (2 buckets)**       | Raw CSV input + Parquet output          | ✅     |
+| **Parquet (snappy)**     | Columnar format with compression        | ✅     |
+| **Terraform**            | Infrastructure as Code for all AWS      | ✅     |
+| **Apache Iceberg**       | Table format (future enhancement)       | 🔄     |
+| **Claude API**           | Schema automation (future enhancement)  | 🔄     |
 
 ---
 
@@ -121,95 +87,38 @@ Status: ✅ All SUCCEEDED
 
 ---
 
-## Phase Roadmap
+## Architecture Decisions
 
-### Phase 0.5 ✅ (COMPLETE)
-
-**Deliverables:**
-
-- ✅ AWS Glue ETL pipeline running daily
-- ✅ Lambda auto-triggers Glue Job
-- ✅ CSV → Parquet transformation verified
-- ✅ S3 data lake structure in place
-- ✅ Terraform IaC for all resources
-- ✅ End-to-end test passed (100 rows)
-
-**Output:** Fully operational, production-ready data pipeline
-
----
-
-### Phase 1 (NEXT - Schema Evolution System)
-
-**Goal:** Build complete schema evolution handling without Claude
-
-**Deliverables:**
-
-- New CSV with 8 columns (subscriber_delta, dislikes added)
-- Updated Glue Job with dynamic column handling
-- E2E test: verify new columns processed correctly
-- Terraform updated
-- Git commit with proof
-
-**Output:** System that adapts to schema changes (manual code update)
-
----
-
-### Phase 2 (FUTURE - Claude Automation)
-
-**Goal:** Automate Phase 1 with Claude API
-
-**Deliverables:**
-
-- Claude API integration for schema change detection
-- Auto-generate PySpark transformation code
-- SKILL command: `claude fix-etl --schema <changes.json>`
-- Automated validation workflow
-- AWS deployment automation
-
-**Output:** One-command schema evolution handling
-
----
-
-### Phase 3 (FUTURE - Iceberg Migration)
-
-**Goal:** Upgrade to Apache Iceberg for enterprise features
-
-**Deliverables:**
-
-- Migration: Parquet → Iceberg tables
-- Glue Catalog metadata centralization
-- Time Travel support (point-in-time queries)
-- ACID transaction handling
-
-**Output:** Enterprise-grade data governance
+| Decision                 | Implementation                              | Trade-offs                              |
+| ------------------------ | ------------------------------------------- | --------------------------------------- |
+| **AWS Glue**             | Managed PySpark ETL                         | Managed service cost vs self-hosted     |
+| **Lambda + EventBridge** | Serverless scheduling + job trigger         | No stream-driven processing (batch only) |
+| **Parquet**              | Columnar format with compression            | Manual schema evolution needed (v1.0)  |
+| **Terraform**            | Infrastructure as Code                      | Learning curve, but reproducibility    |
+| **2-Worker Cluster**     | Balanced cost/throughput for production     | Overkill for sample data, but realistic |
 Gate -->|"❌ Failed"| FixNeeded["Fix & Re-push"]
 
 ````
 
 ---
 
-## Scope
+## What's Included
 
-### Phase 0.5 Implemented ✅
+### Current Implementation ✅
 
-- ✅ AWS Glue ETL pipeline (PySpark-based)
-- ✅ Lambda trigger integration
-- ✅ EventBridge cron scheduling
-- ✅ S3 data lake structure
-- ✅ Terraform IaC for all resources
-- ✅ End-to-end CSV → Parquet pipeline
+- AWS Glue ETL job (PySpark) with schema inference
+- Lambda trigger function (Python 3.12)
+- EventBridge daily cron schedule (6 AM UTC, adjustable)
+- S3 data lake (raw bucket + processed bucket)
+- Terraform modules for reproducible deployment
+- End-to-end validation (CSV → Parquet working)
 
-### Phase 1 Planned (Schema Evolution)
+### Potential Enhancements
 
-- Glue Job with dynamic column handling
-- 8-column CSV processing
-- E2E testing framework
-
-### Phase 2 Planned (Claude Integration)
-
-- Claude API for schema change detection
-- Auto-code generation
-- Validation workflows
+- **Schema Evolution v2**: Handle additional columns dynamically (code ready, test pending)
+- **Claude Integration**: Auto-generate code changes for schema updates (API ready)
+- **Apache Iceberg**: Upgrade from Parquet for time-travel + ACID support
+- **Data Quality Checks**: Schema validation, row count verification, data profiling
 
 ---
 
@@ -320,17 +229,3 @@ aws s3 cp data/sample_input.csv s3://dev-karasuit-raw-bucket/raw/
 ## License
 
 MIT License - see LICENSE file
-
----
-
-## Contact
-
-**Author:** Karasuit  
-**Target:** 2028 EU/Switzerland data engineering roles
-
-**Key Evidence:**
-
-- Production AWS architecture (Glue + Lambda + EventBridge)
-- Infrastructure as Code (Terraform)
-- Hands-on cloud data engineering
-- AI integration roadmap (Phase 2: Claude API)
