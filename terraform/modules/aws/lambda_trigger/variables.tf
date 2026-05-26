@@ -1,5 +1,10 @@
+variable "function_name" {
+  description = "Name of the Lambda function"
+  type        = string
+}
+
 variable "environment" {
-  description = "Environment name"
+  description = "Environment name (dev, staging, prod)"
   type        = string
 }
 
@@ -8,8 +13,8 @@ variable "project" {
   type        = string
 }
 
-variable "lambda_function_arn" {
-  description = "Lambda function ARN to invoke"
+variable "glue_job_name" {
+  description = "Name of the Glue Job to invoke"
   type        = string
 }
 
