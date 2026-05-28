@@ -13,12 +13,18 @@ resource "aws_glue_job" "etl_job" {
   }
 
   default_arguments = {
-    "--job-bookmark-option"   = "job-bookmark-enable"
-    "--INPUT_BUCKET"          = var.input_bucket
-    "--OUTPUT_BUCKET"         = var.output_bucket
+    "--datalake-formats"      = "iceberg"
+    "--input_path"            = "s3://${var.input_bucket}/cloudwatch-logs"
+    "--iceberg_warehouse"     = "s3://${var.output_bucket}/iceberg-warehouse"
+    "--glue_database"         = "dev_karasuit_iceberg_db"
+    "--iceberg_table_name"    = "cloudwatch_logs"
+    "--TempDir"               = "s3://${var.output_bucket}/temp"
     "--enable-spark-ui"       = "true"
     "--spark-event-logs-path" = "s3://${var.output_bucket}/spark-logs/"
   }
+
+  # Iceberg Spark Catalog configuration via environment
+  # (--datalake-formats iceberg enables native Glue Iceberg support in Glue 4.0+)
 
   max_retries = var.max_retries
   timeout     = var.timeout_minutes

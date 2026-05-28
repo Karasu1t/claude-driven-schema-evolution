@@ -35,7 +35,8 @@ resource "aws_iam_role_policy" "glue_job_policy" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketVersioning"
         ]
         Resource = [
           "arn:aws:s3:::${var.input_bucket}",
@@ -48,7 +49,10 @@ resource "aws_iam_role_policy" "glue_job_policy" {
           "s3:PutObject",
           "s3:GetObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketVersioning",
+          "s3:PutObjectVersionTagging",
+          "s3:GetBucketCors"
         ]
         Resource = [
           "arn:aws:s3:::${var.output_bucket}",
@@ -59,15 +63,21 @@ resource "aws_iam_role_policy" "glue_job_policy" {
         Effect = "Allow"
         Action = [
           "glue:GetDatabase",
-          "glue:GetTable",
-          "glue:GetPartitions",
-          "glue:PutTable",
-          "glue:UpdateTable",
-          "glue:CreateTable",
-          "glue:DeleteTable",
           "glue:GetDatabases",
+          "glue:GetTable",
           "glue:GetTables",
-          "glue:PutDataCatalogEncryptionSettings"
+          "glue:GetPartitions",
+          "glue:CreateTable",
+          "glue:UpdateTable",
+          "glue:PutTable",
+          "glue:DeleteTable",
+          "glue:GetTableVersion",
+          "glue:GetTableVersions",
+          "glue:PutDataCatalogEncryptionSettings",
+          "glue:BatchCreatePartition",
+          "glue:BatchDeletePartition",
+          "glue:BatchGetPartition",
+          "glue:BatchUpdatePartition"
         ]
         Resource = "*"
       },
@@ -79,6 +89,13 @@ resource "aws_iam_role_policy" "glue_job_policy" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sts:AssumeRole"
+        ]
+        Resource = aws_iam_role.glue_job_role.arn
       }
     ]
   })

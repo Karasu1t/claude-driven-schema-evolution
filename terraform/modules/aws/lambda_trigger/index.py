@@ -14,20 +14,35 @@ def extract_date_from_filename(filename):
     match = re.search(r'(\d{8})\.csv$', filename)
     return match.group(1) if match else None
 
+def format_date_for_iceberg(date_yyyymmdd: str) -> str:
+    """
+    Convert yyyymmdd format to YYYY/MM/DD for Iceberg input path resolution
+    Example: '20260528' -> '2026/05/28'
+    """
+    if not date_yyyymmdd or len(date_yyyymmdd) != 8:
+        return "AUTO"  # Use automatic date resolution if invalid
+    try:
+        year = date_yyyymmdd[0:4]
+        month = date_yyyymmdd[4:6]
+        day = date_yyyymmdd[6:8]
+        return f"{year}/{month}/{day}"
+    except Exception:
+        return "AUTO"
+
 def lambda_handler(event, context):
     """
-    Trigger a Glue Job and extract date from S3 filename
+    Trigger a Glue Job for Iceberg table processing
     
     Handles:
     - S3 PUT events from EventBridge/S3
     - Manual trigger via EventBridge schedule
     
-    Passes yyyymmdd format to Glue (Glue will convert to yyyy-mm-dd)
+    Extracts date from filename and passes to Glue Job in YYYY/MM/DD format
     """
     job_name = os.environ['GLUE_JOB_NAME']
     
     try:
-        ver_date_raw = None
+        date_yyyymmdd = None
         
         # Try to extract date from S3 event
         if 'Records' in event and len(event['Records']) > 0:
@@ -37,19 +52,23 @@ def lambda_handler(event, context):
             key = record['s3']['object']['key']
             filename = key.split('/')[-1]
             
-            ver_date_raw = extract_date_from_filename(filename)
-            if ver_date_raw:
-                print(f"Extracted date from {filename}: {ver_date_raw}")
+            date_yyyymmdd = extract_date_from_filename(filename)
+            if date_yyyymmdd:
+                print(f"Extracted date from {filename}: {date_yyyymmdd}")
         
         # If no date extracted, use today's date (yyyymmdd format)
-        if not ver_date_raw:
+        if not date_yyyymmdd:
             today = datetime.now().strftime('%Y%m%d')
-            ver_date_raw = today
-            print(f"No date in filename, using today: {ver_date_raw}")
+            date_yyyymmdd = today
+            print(f"No date in filename, using today: {date_yyyymmdd}")
         
-        # Build arguments (pass yyyymmdd format)
+        # Convert date format for Iceberg input path resolution
+        target_date = format_date_for_iceberg(date_yyyymmdd)
+        
+        # Build arguments for Iceberg Glue Job
+        # --target_date: date in YYYY/MM/DD or AUTO format (for Iceberg path resolution)
         arguments = {
-            '--VER_DATE': ver_date_raw
+            '--target_date': target_date
         }
         
         # Start Glue Job with dynamic arguments
@@ -63,7 +82,8 @@ def lambda_handler(event, context):
             'body': json.dumps({
                 'message': f'Glue Job {job_name} started successfully',
                 'jobRunId': response['JobRunId'],
-                'verDate': ver_date_raw
+                'targetDate': target_date,
+                'extractedDate': date_yyyymmdd
             })
         }
     except Exception as e:
