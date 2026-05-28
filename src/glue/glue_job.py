@@ -50,8 +50,8 @@ job.init(args['JOB_NAME'], args)
 try:
     logger.info(f"Starting Glue Job: {args['JOB_NAME']}")
     
-    # 1. Read CSV from S3 bucket
-    input_path = f"s3://{args['INPUT_BUCKET']}/"
+    # 1. Read CSV from S3 bucket (with wildcard to match all CSV files)
+    input_path = f"s3://{args['INPUT_BUCKET']}/*.csv"
     logger.info(f"Reading CSV from: {input_path}")
     
     df = spark.read.csv(
