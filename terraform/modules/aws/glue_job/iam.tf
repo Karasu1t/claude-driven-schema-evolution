@@ -64,7 +64,10 @@ resource "aws_iam_role_policy" "glue_job_policy" {
           "glue:PutTable",
           "glue:UpdateTable",
           "glue:CreateTable",
-          "glue:DeleteTable"
+          "glue:DeleteTable",
+          "glue:GetDatabases",
+          "glue:GetTables",
+          "glue:PutDataCatalogEncryptionSettings"
         ]
         Resource = "*"
       },
