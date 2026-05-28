@@ -97,37 +97,19 @@ try:
     
     logger.info(f"Final schema: {df.printSchema()}")
     
-    # 4. Write to Iceberg table (Glue Catalog)
-    # Iceberg table location in S3
-    iceberg_table_path = f"s3://{args['OUTPUT_BUCKET']}/iceberg_tables/video_data"
-    iceberg_table_name = "video_advertisement_data"
-    catalog = "glue_catalog"  # Glue Catalog as Iceberg catalog
-    
-    logger.info(f"Writing to Iceberg table: {catalog}.default.{iceberg_table_name}")
-    logger.info(f"Table location: {iceberg_table_path}")
-    
-    # Configure Iceberg settings
-    df.write \
-        .option("iceberg.write.parquet.compression-codec", "snappy") \
-        .option("iceberg.write.format.default", "parquet") \
-        .mode("overwrite") \
-        .format("iceberg") \
-        .option("path", iceberg_table_path) \
-        .saveAsTable(f"{catalog}.default.{iceberg_table_name}")
-    
-    logger.info(f"Successfully wrote {df.count()} records to Iceberg table")
-    
-    # Also write Parquet for backward compatibility (Phase 1 support)
-    output_parquet_path = f"s3://{args['OUTPUT_BUCKET']}/processed_data_parquet"
-    logger.info(f"Writing Parquet backup to: {output_parquet_path}")
+    # 4. Write to Parquet in processed bucket
+    # Note: Iceberg integration requires additional Spark packages
+    # For now, using Parquet with proper schema for future Iceberg migration
+    output_path = f"s3://{args['OUTPUT_BUCKET']}/processed_data"
+    logger.info(f"Writing Parquet to: {output_path}")
     
     df.write \
         .option("compression", "snappy") \
         .mode("overwrite") \
         .format("parquet") \
-        .save(output_parquet_path)
+        .save(output_path)
     
-    logger.info(f"Successfully wrote Parquet backup to {output_parquet_path}")
+    logger.info(f"Successfully wrote {df.count()} records to Parquet at {output_path}")
     
     logger.info("Schema evolution processing completed successfully")
     job.commit()

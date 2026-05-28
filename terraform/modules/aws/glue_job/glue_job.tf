@@ -13,14 +13,11 @@ resource "aws_glue_job" "etl_job" {
   }
 
   default_arguments = {
-    "--job-bookmark-option"          = "job-bookmark-enable"
-    "--INPUT_BUCKET"                 = var.input_bucket
-    "--OUTPUT_BUCKET"                = var.output_bucket
-    "--enable-spark-ui"              = "true"
-    "--spark-event-logs-path"        = "s3://${var.output_bucket}/spark-logs/"
-    "--enable-iceberg"               = "true"
-    "--iceberg.glue.caseless-names"  = "false"
-    "--iceberg.catalog.glue.enabled" = "true"
+    "--job-bookmark-option"   = "job-bookmark-enable"
+    "--INPUT_BUCKET"          = var.input_bucket
+    "--OUTPUT_BUCKET"         = var.output_bucket
+    "--enable-spark-ui"       = "true"
+    "--spark-event-logs-path" = "s3://${var.output_bucket}/spark-logs/"
   }
 
   max_retries = var.max_retries
