@@ -27,3 +27,4 @@ resource "aws_s3_bucket_versioning" "raw_bucket_versioning" {
     status = "Enabled"
   }
 }
+

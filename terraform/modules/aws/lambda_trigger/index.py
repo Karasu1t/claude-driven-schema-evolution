@@ -1,25 +1,69 @@
 import json
 import boto3
 import os
+import re
+from datetime import datetime
 
 glue = boto3.client('glue')
 
+def extract_date_from_filename(filename):
+    """
+    Extract yyyymmdd from filename like 'sns_advertisement_20260528.csv'
+    Returns: '20260528' or None if not found
+    """
+    match = re.search(r'(\d{8})\.csv$', filename)
+    return match.group(1) if match else None
+
 def lambda_handler(event, context):
     """
-    Trigger a Glue Job when called by EventBridge
+    Trigger a Glue Job and extract date from S3 filename
+    
+    Handles:
+    - S3 PUT events from EventBridge/S3
+    - Manual trigger via EventBridge schedule
+    
+    Passes yyyymmdd format to Glue (Glue will convert to yyyy-mm-dd)
     """
     job_name = os.environ['GLUE_JOB_NAME']
     
     try:
+        ver_date_raw = None
+        
+        # Try to extract date from S3 event
+        if 'Records' in event and len(event['Records']) > 0:
+            # S3 event
+            record = event['Records'][0]
+            bucket = record['s3']['bucket']['name']
+            key = record['s3']['object']['key']
+            filename = key.split('/')[-1]
+            
+            ver_date_raw = extract_date_from_filename(filename)
+            if ver_date_raw:
+                print(f"Extracted date from {filename}: {ver_date_raw}")
+        
+        # If no date extracted, use today's date (yyyymmdd format)
+        if not ver_date_raw:
+            today = datetime.now().strftime('%Y%m%d')
+            ver_date_raw = today
+            print(f"No date in filename, using today: {ver_date_raw}")
+        
+        # Build arguments (pass yyyymmdd format)
+        arguments = {
+            '--VER_DATE': ver_date_raw
+        }
+        
+        # Start Glue Job with dynamic arguments
         response = glue.start_job_run(
-            JobName=job_name
+            JobName=job_name,
+            Arguments=arguments
         )
         
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'message': f'Glue Job {job_name} started successfully',
-                'jobRunId': response['JobRunId']
+                'jobRunId': response['JobRunId'],
+                'verDate': ver_date_raw
             })
         }
     except Exception as e:

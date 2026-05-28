@@ -25,6 +25,21 @@ args = getResolvedOptions(sys.argv, [
     'OUTPUT_BUCKET',
 ])
 
+# Handle optional VER_DATE argument (passed from Lambda in yyyymmdd format)
+ver_date_formatted = None
+if '--VER_DATE' in sys.argv:
+    idx = sys.argv.index('--VER_DATE')
+    if idx + 1 < len(sys.argv):
+        ver_date_raw = sys.argv[idx + 1]
+        try:
+            # Convert yyyymmdd to yyyy-mm-dd
+            from datetime import datetime as dt
+            date_obj = dt.strptime(ver_date_raw, '%Y%m%d')
+            ver_date_formatted = date_obj.strftime('%Y-%m-%d')
+            logger.info(f"Converted VER_DATE from {ver_date_raw} to {ver_date_formatted}")
+        except ValueError as e:
+            logger.warning(f"Failed to parse VER_DATE {ver_date_raw}: {str(e)}")
+
 # Initialize Spark and Glue context
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -35,8 +50,8 @@ job.init(args['JOB_NAME'], args)
 try:
     logger.info(f"Starting Glue Job: {args['JOB_NAME']}")
     
-    # 1. Read CSV from S3 raw bucket
-    input_path = f"s3://{args['INPUT_BUCKET']}/raw/"
+    # 1. Read CSV from S3 bucket
+    input_path = f"s3://{args['INPUT_BUCKET']}/"
     logger.info(f"Reading CSV from: {input_path}")
     
     df = spark.read.csv(
@@ -73,10 +88,17 @@ try:
     df = df.withColumn("processed_at", lit(datetime.now().isoformat()).cast("string"))
     df = df.withColumn("glue_job_run_id", lit(args['JOB_NAME']).cast("string"))
     
+    # 3.5 Add ver_date column at the end (converted from yyyymmdd to yyyy-mm-dd by Glue)
+    if ver_date_formatted:
+        logger.info(f"Adding ver_date column: {ver_date_formatted}")
+        df = df.withColumn("ver_date", lit(ver_date_formatted).cast("string"))
+    else:
+        logger.warning("VER_DATE not provided or failed to parse, skipping ver_date column")
+    
     logger.info(f"Final schema: {df.printSchema()}")
     
     # 4. Write to Parquet in processed bucket
-    output_path = f"s3://{args['OUTPUT_BUCKET']}/processed/"
+    output_path = f"s3://{args['OUTPUT_BUCKET']}/"
     logger.info(f"Writing Parquet to: {output_path}")
     
     df.write \

@@ -19,3 +19,4 @@ resource "aws_s3_bucket_ownership_controls" "bucket_ownership_control" {
     object_ownership = "BucketOwnerPreferred"
   }
 }
+
