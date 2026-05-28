@@ -98,30 +98,17 @@ try:
     logger.info(f"Final schema: {df.printSchema()}")
     
     # 4. Write to Parquet in processed bucket
-    output_path = f"s3://{args['OUTPUT_BUCKET']}/"
+    output_path = f"s3://{args['OUTPUT_BUCKET']}/processed_data"
     logger.info(f"Writing Parquet to: {output_path}")
     
+    # Use PySpark DataFrame write with snappy compression
     df.write \
+        .option("compression", "snappy") \
         .mode("overwrite") \
         .format("parquet") \
         .save(output_path)
     
     logger.info(f"Successfully wrote {df.count()} records to {output_path}")
-    
-    # 5. Register in Glue Catalog (optional)
-    # This creates a metadata entry for the processed data
-    output_dyf = DynamicFrame.fromDF(df, glueContext, "output")
-    
-    glueContext.write_dynamic_frame.from_options(
-        frame=output_dyf,
-        connection_type="s3",
-        connection_options={
-            "path": output_path,
-            "partitionKeys": []
-        },
-        format="parquet",
-        transformation_ctx="output"
-    )
     
     logger.info("Schema evolution processing completed successfully")
     job.commit()
