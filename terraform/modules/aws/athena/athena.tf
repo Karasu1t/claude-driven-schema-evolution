@@ -66,9 +66,9 @@ resource "aws_glue_catalog_database" "iceberg_database" {
 
 # Athena named query (sample query for Iceberg table)
 resource "aws_athena_named_query" "iceberg_sample_query" {
-  name           = "${var.environment}-${var.project}-iceberg-sample-query"
-  description    = "Sample query to verify Iceberg table integration with Athena"
-  database       = aws_glue_catalog_database.iceberg_database.name
-  query          = "SELECT * FROM video_advertisement_data LIMIT 10;"
-  workgroup_name = aws_athena_workgroup.iceberg_workgroup.name
+  name        = "${var.environment}-${var.project}-iceberg-sample-query"
+  description = "Sample query to verify Iceberg table integration with Athena"
+  database    = aws_glue_catalog_database.iceberg_database.name
+  query       = "SELECT * FROM video_advertisement_data LIMIT 10;"
+  workgroup   = aws_athena_workgroup.iceberg_workgroup.name
 }
