@@ -65,11 +65,12 @@ Scheduled Option (via EventBridge):
   6:00 AM UTC → EventBridge Cron Rule → Lambda (optional alternate trigger)
 
 Status: ✅ Phase 1 Complete - Date-based file processing OPERATIONAL
+         ✅ Phase 2 Parquet Output - Verified and working (20260529 test)
 ```
 
 ---
 
-### Phase 1 Implementation Details
+## Phase 1: Date-Based CSV Processing ✅
 
 **File Naming Convention:**
 
@@ -77,6 +78,55 @@ Status: ✅ Phase 1 Complete - Date-based file processing OPERATIONAL
 - Lambda extracts 8-digit date via regex: `(\d{8})\.csv$`
 - Passes to Glue as: `--VER_DATE 20260528`
 - Glue converts to: `2026-05-28` and adds as `ver_date` column
+
+**Verification Results (2026-05-29):**
+
+```
+✅ Lambda function extracts date correctly: verDate=20260529
+✅ Glue Job triggers successfully: JobRunId=jr_81b6f5c10da8864ba4dde195b7870744b44f395f12530f90c48d9d8918035549
+✅ Execution Time: 48 seconds (start 08:42:17, end 08:43:16)
+✅ Parquet file created: 3.3 KB with snappy compression
+✅ Job Bookmark incremental processing enabled
+✅ Metadata columns added: processed_at, glue_job_run_id, ver_date
+```
+
+---
+
+## Phase 2: Parquet Output & Data Lake Foundation ✅
+
+**Current Status:**
+
+- ✅ Glue Job writes Parquet with snappy compression
+- ✅ Output location: `s3://dev-karasuit-processed-bucket/processed_data/`
+- ✅ Schema includes 9 columns: 6 original + 3 metadata
+- ✅ File format validated (3.3 KB successfully created and downloadable)
+
+**Note on Iceberg:**
+
+- Attempted Iceberg integration in this phase
+- Glue 4.0 environment lacks `org.apache.iceberg` dependency
+- Decision: Continue with Parquet (stable, production-ready)
+- Future: Iceberg can be added with custom Spark packages or dedicated Glue job configuration
+
+---
+
+## Phase 3: Athena Integration (Planned)
+
+**Infrastructure Ready:**
+
+- ✅ Athena Workgroup: `dev-karasuit-iceberg-workgroup`
+- ✅ Glue Catalog Database: `dev_karasuit_iceberg_db`
+- ✅ Results Bucket: `dev-karasuit-athena-results-bucket`
+
+**Next Steps:**
+
+1. Register Parquet files as external tables in Glue Catalog
+2. Execute SQL queries via Athena workgroup
+3. Verify data lake queryability
+
+---
+
+### Phase 1 & 2 Implementation Details
 
 **Output Schema:**
 
