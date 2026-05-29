@@ -70,14 +70,124 @@ Status: ✅ Phase 1 Complete - Date-based file processing OPERATIONAL
 
 ---
 
-## Phase 1: Date-Based CSV Processing ✅
+## Phase 1: Date-Based CSV Processing ✅ COMPLETE
 
 **File Naming Convention:**
 
-- Input: `sns_advertisement_YYYYMMDD.csv` (e.g., `sns_advertisement_20260528.csv`)
+- Input: `sns_advertisement_YYYYMMDD.csv` (e.g., `sns_advertisement_20260529.csv`)
 - Lambda extracts 8-digit date via regex: `(\d{8})\.csv$`
-- Passes to Glue as: `--VER_DATE 20260528`
-- Glue converts to: `2026-05-28` and adds as `ver_date` column
+- Passes to Glue as: `--VER_DATE 20260529`
+- Glue converts to: `2026-05-29` and adds as `ver_date` column
+
+**Verification Status (May 29, 2026):**
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Lambda Date Extraction | ✅ | Extracted `20260529` from `sns_advertisement_20260529.csv` |
+| Glue Job Trigger | ✅ | Job started with jobRunId: `jr_f9818808cea61fe3e8e5b103ce0620b9142978e5d3ec976c498818c9a5308e66` |
+| Glue Job Execution | ✅ SUCCEEDED | Completed in 73 seconds (09:00:55 → 09:02:16) |
+| Parquet Output | ✅ | File created: `processed_data/part-00000-*.snappy.parquet` (3,331 bytes) |
+| Schema | ✅ | 9 columns: 6 original + 3 metadata (processed_at, glue_job_run_id, ver_date) |
+| Job Bookmark | ✅ | Incremental processing enabled for future runs |
+
+---
+
+## Phase 2: Parquet Output ✅ VERIFIED
+
+**Output Location:**
+
+```
+S3: s3://dev-karasuit-processed-bucket/
+├── processed_data/
+│   └── part-00000-23811b23-0e62-48e7-8c57-75f8961a9842-c000.snappy.parquet  (3.3 KB)
+├── spark-logs/
+└── _SUCCESS
+```
+
+**Schema (9 Columns):**
+
+1. `video_title` (string) - Original CSV column
+2. `views` (long) - Original CSV column
+3. `channel_name` (string) - Original CSV column
+4. `channel_subscribers` (long) - Original CSV column
+5. `likes` (long) - Original CSV column
+6. `video_duration_minutes` (long) - Original CSV column
+7. `processed_at` (timestamp) - Metadata: processing timestamp
+8. `glue_job_run_id` (string) - Metadata: Glue Job identifier
+9. `ver_date` (string, YYYY-MM-DD) - Metadata: extracted from filename
+
+---
+
+## Infrastructure & Automation
+
+**AWS Stack:**
+
+- **AWS Glue 4.0 Job**: PySpark 3.11 on 2× G.2X workers, 30-minute timeout
+- **AWS Lambda**: Python 3.12, date extraction from S3 filename
+- **EventBridge**: Daily 6:00 AM UTC schedule (cron: `0 6 * * ? *`)
+- **S3 Buckets**: Raw input, processed output, Athena results
+- **Terraform**: Full IaC for reproducible deployments
+
+**Current Workflow:**
+
+```
+Daily 6 AM UTC
+  ↓
+EventBridge Cron Rule (dev-karasuit-scheduled-trigger-rule)
+  ↓
+Lambda Function (dev-karasuit-glue-job-trigger)
+  ├─ Checks for new CSV files in raw bucket
+  ├─ Extracts YYYYMMDD from filename
+  └─ Triggers Glue Job with --VER_DATE argument
+  ↓
+Glue Job (dev-karasuit-schema-evolution-etl)
+  ├─ Reads CSV from s3://dev-karasuit-raw-bucket/*.csv
+  ├─ Schema inference + required column validation
+  ├─ Dynamic column addition (if schema changed)
+  ├─ Add metadata columns
+  └─ Write Parquet to s3://dev-karasuit-processed-bucket/processed_data/
+  ↓
+S3 Processed Bucket
+  ├─ Snappy-compressed Parquet files
+  ├─ Spark event logs (for debugging)
+  └─ Job success/failure markers
+```
+
+---
+
+## Deployment & Testing
+
+**Deploy Infrastructure:**
+
+```bash
+cd terraform/env/dev/aws
+terraform init
+terraform apply
+```
+
+**Test Pipeline:**
+
+```bash
+# Upload test CSV
+aws s3 cp data/sns_advertisement_20260529.csv s3://dev-karasuit-raw-bucket/
+
+# Invoke Lambda manually (simulates S3 event)
+PAYLOAD=$(echo -n '{"Records":[{"s3":{"bucket":{"name":"dev-karasuit-raw-bucket"},"object":{"key":"sns_advertisement_20260529.csv"}}}]}' | base64)
+aws lambda invoke --function-name dev-karasuit-glue-job-trigger --payload "$PAYLOAD" response.json
+cat response.json | jq
+
+# Monitor Glue Job
+aws glue get-job-run --job-name dev-karasuit-schema-evolution-etl --run-id <jobRunId>
+
+# Verify Parquet output
+aws s3 ls s3://dev-karasuit-processed-bucket/processed_data/
+```
+
+**Test Data:**
+
+- Location: [`data/sns_advertisement_20260529.csv`](data/sns_advertisement_20260529.csv)
+- Rows: 5 (sample video advertisement data)
+- Columns: 6 (video_title, views, channel_name, channel_subscribers, likes, video_duration_minutes)
 
 **Verification Results (2026-05-29):**
 
