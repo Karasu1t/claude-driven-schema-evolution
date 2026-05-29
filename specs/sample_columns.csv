@@ -1,4 +1,0 @@
-id,name,email,created_at,status
-1,Alice,alice@example.com,2025-01-01,active
-2,Bob,bob@example.com,2025-01-02,active
-3,Charlie,charlie@example.com,2025-01-03,inactive
