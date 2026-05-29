@@ -1,6 +1,7 @@
 # Athena Workgroup for querying Iceberg tables
 resource "aws_athena_workgroup" "iceberg_workgroup" {
-  name = "${var.environment}-${var.project}-iceberg-workgroup"
+  name          = "${var.environment}-${var.project}-iceberg-workgroup"
+  force_destroy = true
 
   configuration {
     enforce_workgroup_configuration    = true
@@ -35,7 +36,8 @@ resource "aws_athena_workgroup" "iceberg_workgroup" {
 
 # S3 bucket for Athena query results
 resource "aws_s3_bucket" "athena_results_bucket" {
-  bucket = "${var.environment}-${var.project}-athena-results-bucket"
+  bucket        = "${var.environment}-${var.project}-athena-results-bucket"
+  force_destroy = true
 
   tags = merge(
     var.tags,

@@ -1,1 +1,0 @@
-{"statusCode": 200, "body": "{\"message\": \"Glue Job dev-karasuit-schema-evolution-etl started (Phase 3: Iceberg with Parquet fallback)\", \"jobRunId\": \"jr_e41c042fb3b9898ef3e5bcd8c910a6f58c41361f9901addca3d7fa765c29c339\", \"verDate\": \"20260529\"}"}

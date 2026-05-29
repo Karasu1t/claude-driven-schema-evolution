@@ -13,17 +13,10 @@ resource "aws_glue_job" "etl_job" {
   }
 
   default_arguments = {
-    # Phase 1-2: Parquet (always present for fallback)
-    "--job-bookmark-option" = "job-bookmark-enable"
-    "--INPUT_BUCKET"        = var.input_bucket
-    "--OUTPUT_BUCKET"       = var.output_bucket
-
-    # Phase 3: Iceberg (optional, will fallback to Parquet if issues occur)
-    "--iceberg_warehouse"  = "s3://${var.output_bucket}/iceberg-warehouse"
-    "--glue_database"      = "dev_karasuit_iceberg_db"
-    "--iceberg_table_name" = "video_advertisement"
-
-    # Spark configuration
+    "--job-bookmark-option"   = "job-bookmark-enable"
+    "--INPUT_BUCKET"          = var.input_bucket
+    "--OUTPUT_BUCKET"         = var.output_bucket
+    "--datalake-formats"      = "iceberg"
     "--enable-spark-ui"       = "true"
     "--spark-event-logs-path" = "s3://${var.output_bucket}/spark-logs/"
   }
