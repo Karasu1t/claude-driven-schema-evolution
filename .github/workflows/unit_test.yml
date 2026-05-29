@@ -65,7 +65,7 @@ jobs:
         continue-on-error: true
         with:
           script: |
-            const output = `${{ steps.pytest.outputs.result }}`;
+            const rawOutput = `${{ steps.pytest.outputs.result }}`;
             const testStatus = `${{ steps.pytest.outputs.status }}`;
             const status = testStatus === 'success' ? '✅ PASSED' : '❌ FAILED';
 
@@ -74,7 +74,7 @@ jobs:
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: `## 🧪 Unit Test Results\n\n${status}\n\n\`\`\`\n${output}\n\`\`\``
+                body: `## 🧪 Unit Test Results\n\n${status}\n\n\`\`\`\n${rawOutput}\n\`\`\``
               });
             } catch (error) {
               console.log('Failed to post PR comment, but test results are in workflow logs:', error);
