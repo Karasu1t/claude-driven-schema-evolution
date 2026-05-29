@@ -1,4 +1,4 @@
-name: Iceberg ETL Integration Test
+name: E2E Test - Iceberg ETL Pipeline
 
 on:
   workflow_dispatch:
@@ -58,7 +58,6 @@ jobs:
           TEST_DATE="${{ env.TEST_CSV_DATE }}"
           aws s3 cp "test_data/sns_advertisement_${TEST_DATE}.csv" \
             "s3://dev-karasuit-raw-bucket/sns_advertisement_${TEST_DATE}.csv"
-          echo "✓ Uploaded test CSV to S3"
 
       - name: Trigger Glue Job
         run: |
@@ -72,17 +71,14 @@ jobs:
             --region ap-northeast-1)
 
           cat /tmp/response.json | jq .
-          echo "✓ Lambda invoked"
 
       - name: Wait for Glue Job
         run: |
           echo "Waiting 90 seconds for Glue Job to complete..."
           sleep 90
-          echo "✓ Job execution window complete"
 
       - name: Verify Iceberg Table
         run: |
-          # Query Athena to verify table exists and has data
           QUERY="SELECT COUNT(*) as row_count FROM dev_karasuit_iceberg_db.video_advertisement;"
 
           QUERY_ID=$(aws athena start-query-execution \
@@ -93,8 +89,6 @@ jobs:
             --query 'QueryExecutionId' \
             --output text)
 
-          echo "Query ID: $QUERY_ID"
-
           # Wait for query to complete
           for i in {1..30}; do
             STATUS=$(aws athena get-query-execution \
@@ -104,7 +98,6 @@ jobs:
               --output text)
             
             if [ "$STATUS" = "SUCCEEDED" ]; then
-              echo "✓ Query completed successfully"
               aws athena get-query-results --query-execution-id "$QUERY_ID" --region ap-northeast-1 | jq .
               break
             elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELLED" ]; then
@@ -112,6 +105,5 @@ jobs:
               exit 1
             fi
             
-            echo "Status: $STATUS (attempt $i/30)"
             sleep 2
           done
