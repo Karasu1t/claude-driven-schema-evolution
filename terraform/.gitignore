@@ -1,0 +1,13 @@
+# Terraform working directory (contains downloaded providers)
+.terraform/
+
+# Local state files
+*.tfstate
+*.tfstate.*
+
+# Plans (temporary, generated during workflow)
+*.tfplan
+
+# Other temporary files from testing
+query_id_*.txt
+response.json

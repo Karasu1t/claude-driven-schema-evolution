@@ -23,11 +23,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual environments
+# Virtual environments (Python)
 venv/
 ENV/
-env/
 .venv
+# Python env directory at root only
+/env/
 
 # IDE
 .vscode/
