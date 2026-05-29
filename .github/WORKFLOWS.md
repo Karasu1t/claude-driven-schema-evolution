@@ -4,12 +4,12 @@
 
 ## 📋 Workflow Overview
 
-| Workflow | Type | Trigger | Purpose |
-|----------|------|---------|---------|
-| `unit_test.yml` | UT | `push` to src/glue or tests/ | Pytest schema logic validation |
-| `terraform_apply.yml` | Infrastructure | `push` to main | Auto-deploy AWS resources |
-| `e2e_test.yml` | E2E | Manual `workflow_dispatch` | End-to-end pipeline verification |
-| `terraform_destroy.yml` | Infrastructure | Manual (requires confirm) | Safe infrastructure teardown |
+| Workflow                | Type           | Trigger                      | Purpose                          |
+| ----------------------- | -------------- | ---------------------------- | -------------------------------- |
+| `unit_test.yml`         | UT             | `push` to src/glue or tests/ | Pytest schema logic validation   |
+| `terraform_apply.yml`   | Infrastructure | `push` to main               | Auto-deploy AWS resources        |
+| `e2e_test.yml`          | E2E            | Manual `workflow_dispatch`   | End-to-end pipeline verification |
+| `terraform_destroy.yml` | Infrastructure | Manual (requires confirm)    | Safe infrastructure teardown     |
 
 ---
 
@@ -63,8 +63,7 @@
 1. ✅ Checkout code
 2. ✅ Install pytest + pyspark
 3. ✅ Run pytest test suite
-4. ✅ Generate coverage report
-5. ✅ Test on Python 3.9 & 3.11
+4. ✅ Test on Python 3.9 & 3.11
 
 **Test Cases:**
 
@@ -265,6 +264,7 @@ Message: "Skipped due to condition: github.actor == 'Karasu1t'"
 ```
 
 This prevents:
+
 - ❌ Unauthorized AWS resource creation
 - ❌ Cost overruns from accidental/malicious deployment
 - ❌ Infrastructure destruction by unknown users
@@ -318,14 +318,14 @@ GitHub Actions → e2e_test → "Run workflow" (test_date=20260529)
 
 ## 🐛 Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Unit tests fail locally | `pip install -r tests/requirements.txt && pytest tests/` |
-| AWS credentials error | Verify GitHub Secrets are set correctly |
-| Terraform init fails | Check AWS region and IAM permissions |
-| Glue Job timeout | Increase timeout in terraform/modules/aws/glue_job/glue_job.tf |
-| Athena query fails | Wait 2 min after Glue Job completes |
-| Permission denied on workflow | Only Karasu1t can run workflows (by design) |
+| Issue                         | Solution                                                       |
+| ----------------------------- | -------------------------------------------------------------- |
+| Unit tests fail locally       | `pip install -r tests/requirements.txt && pytest tests/`       |
+| AWS credentials error         | Verify GitHub Secrets are set correctly                        |
+| Terraform init fails          | Check AWS region and IAM permissions                           |
+| Glue Job timeout              | Increase timeout in terraform/modules/aws/glue_job/glue_job.tf |
+| Athena query fails            | Wait 2 min after Glue Job completes                            |
+| Permission denied on workflow | Only Karasu1t can run workflows (by design)                    |
 
 ---
 
@@ -335,7 +335,6 @@ GitHub Actions → e2e_test → "Run workflow" (test_date=20260529)
 
 ```
 pytest==7.4.3
-pytest-cov==4.1.0
 pyspark==3.5.0
 ```
 
@@ -343,7 +342,7 @@ pyspark==3.5.0
 
 ```bash
 pip install -r tests/requirements.txt
-pytest tests/test_glue_job.py -v --cov=src/glue
+pytest tests/test_glue_job.py -v
 ```
 
 ---

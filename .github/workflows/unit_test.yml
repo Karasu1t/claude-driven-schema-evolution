@@ -37,7 +37,3 @@ jobs:
       - name: Run pytest
         run: |
           pytest tests/test_glue_job.py -v --tb=short
-
-      - name: Generate coverage report
-        run: |
-          pytest tests/test_glue_job.py --cov=src/glue --cov-report=term-missing
