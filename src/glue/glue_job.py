@@ -148,8 +148,7 @@ try:
         .option("path", iceberg_path) \
         .option("format-version", "2") \
         .partitionedBy("partition_date") \
-        .mode("overwrite") \
-        .saveAsTable()
+        .overwrite()
     
     logger.info(f"✓ Iceberg: {GLUE_DATABASE}.{TABLE_NAME} (partitioned by date)")
     
