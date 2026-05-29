@@ -70,6 +70,12 @@ try:
     spark.conf.set("spark.sql.catalog.glue_catalog.glue.region", glue_region)
     spark._jsparkSession.sessionState().catalogManager().setCurrentCatalog("glue_catalog")
     logger.info(f"Iceberg catalog configured for {GLUE_DATABASE}.{TABLE_NAME}")
+    
+    # Create database if not exists
+    create_db_sql = f"CREATE DATABASE IF NOT EXISTS {GLUE_DATABASE}"
+    spark.sql(create_db_sql)
+    logger.info(f"Database {GLUE_DATABASE} ready")
+    
 except Exception as e:
     logger.error(f"Catalog config failed: {str(e)}", exc_info=True)
     raise
@@ -84,6 +90,14 @@ try:
     
     if not ver_date:
         raise ValueError("VER_DATE argument is required")
+    
+    # Convert yyyymmdd to yyyy-mm-dd for partition
+    # e.g., "20260529" -> "2026-05-29"
+    if len(ver_date) == 8 and ver_date.isdigit():
+        partition_date = f"{ver_date[:4]}-{ver_date[4:6]}-{ver_date[6:8]}"
+        logger.info(f"Partition date: {partition_date}")
+    else:
+        raise ValueError(f"Invalid VER_DATE format: {ver_date}. Expected yyyymmdd")
     
     # Read CSV with specific date
     csv_path = f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
@@ -101,6 +115,9 @@ try:
             df = df.withColumn(col_name, lit(None).cast("string"))
     
     df = df.select(['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes'])
+    
+    # Add metadata columns: partition_date for partitioning, processed_at for lineage
+    df = df.withColumn("partition_date", lit(partition_date).cast("date"))
     df = df.withColumn("processed_at", lit(datetime.now().isoformat()).cast("string"))
     df = df.withColumn("glue_job_run_id", lit(job.getJobRunId()).cast("string"))
     
@@ -113,14 +130,17 @@ try:
     except:
         pass
     
+    # Write with partitioning by date
+    # Iceberg automatically optimizes query performance based on partition
     df.writeTo(full_table_qualified) \
         .using("iceberg") \
         .option("path", iceberg_path) \
         .option("format-version", "2") \
+        .partitionedBy("partition_date") \
         .mode("overwrite") \
         .saveAsTable()
     
-    logger.info(f"✓ Iceberg: {GLUE_DATABASE}.{TABLE_NAME}")
+    logger.info(f"✓ Iceberg: {GLUE_DATABASE}.{TABLE_NAME} (partitioned by date)")
     
     job.commit()
 
