@@ -107,23 +107,28 @@ try:
         f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
     ]
     
+    print(f"DEBUG: csv_candidates = {csv_candidates}")
     csv_path = None
     for candidate in csv_candidates:
-        print(f"DEBUG: Trying candidate: {candidate}")
+        print(f"DEBUG: Attempting to probe candidate: {candidate}")
         try:
-            # Quick test read to check if file is accessible
-            spark.read.csv(candidate, header=True, nRows=1)
+            # Try to read just the header/first row
+            probe_df = spark.read.csv(candidate, header=True)
             csv_path = candidate
-            print(f"DEBUG: Found accessible file: {csv_path}")
+            print(f"DEBUG: ✓ Successfully found file: {csv_path}")
+            logger.info(f"✓ Found CSV file: {csv_path}")
             break
-        except:
+        except Exception as probe_e:
+            print(f"DEBUG: ✗ Candidate not found: {candidate} ({str(probe_e)[:50]})")
+            logger.debug(f"Candidate {candidate} not found")
             continue
     
     if not csv_path:
         csv_path = csv_candidates[1]  # Fallback to default pattern
         print(f"DEBUG: Using fallback: {csv_path}")
+        logger.info(f"Using fallback pattern: {csv_path}")
     
-    print(f"DEBUG: csv_path = {csv_path}")
+    print(f"DEBUG: Final csv_path = {csv_path}")
     print(f"DEBUG: INPUT_BUCKET = {args['INPUT_BUCKET']}")
     logger.info(f"Reading CSV: {csv_path}")
     
