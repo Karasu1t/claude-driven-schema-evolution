@@ -131,7 +131,6 @@ try:
     # Add metadata columns: partition_date for partitioning, processed_at for lineage
     df = df.withColumn("partition_date", lit(partition_date).cast("date"))
     df = df.withColumn("processed_at", lit(datetime.now().isoformat()).cast("string"))
-    df = df.withColumn("glue_job_run_id", lit(job.getJobRunId()).cast("string"))
     
     # Write to Iceberg
     full_table_qualified = f"glue_catalog.{GLUE_DATABASE}.{TABLE_NAME}"
