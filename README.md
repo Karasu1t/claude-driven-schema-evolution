@@ -201,6 +201,64 @@ terraform apply
 
 ---
 
+## 👨‍💻 Development Workflow (Git & CI/CD)
+
+### Branch Strategy
+
+- **`main`**: Production-ready code (stable)
+- **`dev`**: Development integration branch (base for feature work)
+- **`test_YYYYMMDD`**: Feature branches (cut from `dev`, merged back via PR)
+
+### Development Process
+
+1. **Create Feature Branch**
+   ```bash
+   git checkout dev
+   git pull origin dev
+   git checkout -b test_20260530  # or test_feature-name
+   ```
+
+2. **Make Changes & Commit**
+   ```bash
+   # ... edit src/glue/glue_job.py, etc.
+   git add .
+   git commit -m "feat: Description of changes"
+   git push origin test_20260530
+   ```
+
+3. **Create Pull Request**
+   - Push to GitHub and create PR: `test_20260530` → `dev`
+   - **Automated checks trigger**:
+     - ✅ Unit Tests (via `unit_test.yml`)
+     - ✅ E2E Tests (via `e2e_test.yml`)
+
+4. **Review & Merge**
+   - All tests must pass
+   - Code review (if configured)
+   - Merge to `dev`
+
+5. **Release to Production**
+   - When `dev` is stable, create PR: `dev` → `main`
+   - Tests run again before merge
+   - After merge, manual EventBridge deployment (or scheduled via Terraform)
+
+### CI/CD Automation
+
+**E2E Test Workflow** (`e2e_test.yml`)
+- **Triggers**: PR creation/update on `dev` or `main` branches
+- **Test Data**: Git-managed `test_data/sns_advertisement_yyyymmdd.csv`
+- **Expected Output**: `test_data/expected_output.csv` (partition_date auto-replaced)
+- **Runtime**: ~2 minutes (90 seconds Glue wait + Athena query)
+- **Result**: ✅ PASS if all 35 cells match (skip dynamic `processed_at` timestamp)
+
+**Manual Trigger** (still available)
+```bash
+# Manually run E2E test from GitHub Actions UI:
+# Actions → E2E Test - Iceberg ETL Pipeline → Run workflow
+```
+
+---
+
 ## 🧪 Manual Testing
 
 ### Test CSV Upload
