@@ -148,8 +148,9 @@ jobs:
           fi
 
       - name: Compare Results with Expected Values
+        id: e2e_compare
         run: |
-          python3 << 'EOF'
+          python3 > /tmp/e2e_output.txt 2>&1 << 'EOF'
           import pandas as pd
           import sys
 
@@ -248,3 +249,24 @@ jobs:
               print("=" * 80)
 
           EOF
+
+          # Save output to GITHUB_OUTPUT with preserved formatting
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/e2e_output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Comment on PR with E2E Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `${{ steps.e2e_compare.outputs.result }}`;
+            const status = `${{ steps.e2e_compare.outcome }}` === 'success' ? '✅ PASSED' : '❌ FAILED';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 E2E Test Results\n\n${status}\n\n\`\`\`\n${output}\n\`\`\``
+            });
