@@ -84,12 +84,11 @@ jobs:
           echo "Waiting 90 seconds for Glue Job to complete..."
           sleep 90
 
-      - name: Verify Iceberg Table
+      - name: Query Iceberg Table (Full Data)
         run: |
-          # Use test database for E2E test verification
           TEST_DB="dev_karasuit_iceberg_db_test"
           TEST_RESULTS_BUCKET="dev-karasuit-processed-bucket-test"
-          QUERY="SELECT COUNT(*) as row_count FROM ${TEST_DB}.video_advertisement;"
+          QUERY="SELECT * FROM ${TEST_DB}.video_advertisement ORDER BY video_title;"
 
           QUERY_ID=$(aws athena start-query-execution \
             --query-string "$QUERY" \
@@ -100,6 +99,7 @@ jobs:
             --output text)
 
           echo "Query ID: $QUERY_ID"
+          echo "ATHENA_QUERY_ID=$QUERY_ID" >> $GITHUB_ENV
 
           # Wait for query to complete
           for i in {1..30}; do
@@ -111,7 +111,6 @@ jobs:
             
             if [ "$STATUS" = "SUCCEEDED" ]; then
               echo "✓ Query completed successfully"
-              aws athena get-query-results --query-execution-id "$QUERY_ID" --region ap-northeast-1 | jq .
               break
             elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELLED" ]; then
               echo "✗ Query failed: $STATUS"
@@ -121,3 +120,119 @@ jobs:
             echo "Status: $STATUS (attempt $i/30)"
             sleep 2
           done
+
+      - name: Download Athena Results
+        run: |
+          aws s3 cp "s3://dev-karasuit-processed-bucket-test/${ATHENA_QUERY_ID}.csv" \
+            "/tmp/athena_result.csv" \
+            --region ap-northeast-1 || echo "Standard result file not found, trying manifest"
+
+          # If the above fails, try to find the actual result file
+          if [ ! -f "/tmp/athena_result.csv" ]; then
+            RESULT_FILES=$(aws s3 ls s3://dev-karasuit-processed-bucket-test/ \
+              --recursive --region ap-northeast-1 | grep "$ATHENA_QUERY_ID" | grep -v ".txt" | awk '{print $NF}')
+            
+            if [ ! -z "$RESULT_FILES" ]; then
+              FILE=$(echo "$RESULT_FILES" | head -1)
+              aws s3 cp "s3://dev-karasuit-processed-bucket-test/$FILE" \
+                "/tmp/athena_result.csv" \
+                --region ap-northeast-1
+            fi
+          fi
+
+          if [ -f "/tmp/athena_result.csv" ]; then
+            echo "✓ Downloaded Athena results"
+            head -5 /tmp/athena_result.csv
+          else
+            echo "✗ Failed to download Athena results"
+            exit 1
+          fi
+
+      - name: Compare Results with Expected Values
+        run: |
+          python3 << 'EOF'
+          import pandas as pd
+          import sys
+
+          # Read actual results from Athena
+          try:
+              actual_df = pd.read_csv('/tmp/athena_result.csv')
+          except Exception as e:
+              print(f"✗ Failed to read Athena results: {e}")
+              sys.exit(1)
+
+          # Read expected values
+          try:
+              expected_df = pd.read_csv('test_data/expected_output.csv')
+          except Exception as e:
+              print(f"✗ Failed to read expected output: {e}")
+              sys.exit(1)
+
+          print("=" * 80)
+          print("TEST RESULTS SUMMARY")
+          print("=" * 80)
+
+          # Check shape match
+          if actual_df.shape != expected_df.shape:
+              print(f"✗ Shape mismatch!")
+              print(f"  Expected: {expected_df.shape[0]} rows × {expected_df.shape[1]} columns")
+              print(f"  Actual: {actual_df.shape[0]} rows × {actual_df.shape[1]} columns")
+              sys.exit(1)
+
+          # Check column names
+          if list(actual_df.columns) != list(expected_df.columns):
+              print(f"✗ Column mismatch!")
+              print(f"  Expected columns: {list(expected_df.columns)}")
+              print(f"  Actual columns: {list(actual_df.columns)}")
+              sys.exit(1)
+
+          # Cell-by-cell comparison (excluding timestamp columns)
+          mismatches = []
+          skip_columns = ['processed_at']  # Skip dynamic columns
+
+          for row_idx in range(expected_df.shape[0]):
+              for col_name in expected_df.columns:
+                  if col_name in skip_columns:
+                      continue
+
+                  expected_val = str(expected_df.loc[row_idx, col_name]).strip()
+                  actual_val = str(actual_df.loc[row_idx, col_name]).strip()
+
+                  if expected_val != actual_val:
+                      mismatches.append({
+                          'row': row_idx,
+                          'column': col_name,
+                          'expected': expected_val,
+                          'actual': actual_val
+                      })
+
+          # Calculate statistics
+          total_cells = (expected_df.shape[0] * len([c for c in expected_df.columns if c not in skip_columns]))
+          ok_cells = total_cells - len(mismatches)
+
+          print(f"\n📊 CELL-BY-CELL VERIFICATION")
+          print(f"  Total cells checked: {total_cells}")
+          print(f"  ✅ OK cells: {ok_cells}/{total_cells}")
+          print(f"  ❌ NG cells: {len(mismatches)}")
+
+          # Print actual data
+          print(f"\n📋 ACTUAL DATA FROM ICEBERG")
+          print(actual_df.to_string())
+
+          # Print expected data
+          print(f"\n📋 EXPECTED DATA")
+          print(expected_df.to_string())
+
+          if mismatches:
+              print(f"\n❌ MISMATCHES FOUND:")
+              for mismatch in mismatches:
+                  print(f"  Row {mismatch['row']}, Column '{mismatch['column']}':")
+                  print(f"    Expected: {mismatch['expected']}")
+                  print(f"    Actual: {mismatch['actual']}")
+              sys.exit(1)
+          else:
+              print(f"\n✅ ALL TESTS PASSED!")
+              print("=" * 80)
+
+          EOF
+

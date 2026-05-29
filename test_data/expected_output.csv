@@ -1,0 +1,4 @@
+video_title,views,channel_name,channel_subscribers,likes,video_duration_minutes,partition_date,processed_at
+test_video_1,50000,TestChannel1,100000,5000,10,2026-05-30,PLACEHOLDER
+test_video_2,75000,TestChannel2,150000,7500,15,2026-05-30,PLACEHOLDER
+test_video_3,100000,TestChannel3,200000,10000,20,2026-05-30,PLACEHOLDER
