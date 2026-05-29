@@ -2,7 +2,12 @@ import json
 import boto3
 import os
 import re
+import logging
 from datetime import datetime
+
+# Setup logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 glue = boto3.client('glue')
 
