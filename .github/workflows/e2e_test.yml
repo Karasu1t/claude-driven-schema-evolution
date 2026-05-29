@@ -150,7 +150,7 @@ jobs:
       - name: Compare Results with Expected Values
         id: e2e_compare
         run: |
-          python3 << 'EOF'
+          python3 > /tmp/e2e_output.txt 2>&1 << 'EOF'
           import pandas as pd
           import sys
 
@@ -250,110 +250,9 @@ jobs:
 
           EOF
 
-          # Store output for PR comment
-          OUTPUT=$(python3 << 'EOF' 2>&1
-          import pandas as pd
-          import sys
-
-          # Read actual results from Athena
-          try:
-              actual_df = pd.read_csv('/tmp/athena_result.csv')
-          except Exception as e:
-              print(f"✗ Failed to read Athena results: {e}")
-              sys.exit(1)
-
-          # Read expected values
-          try:
-              expected_df = pd.read_csv('/tmp/expected_output.csv')
-          except Exception as e:
-              print(f"✗ Failed to read expected output: {e}")
-              sys.exit(1)
-
-          print("=" * 80)
-          print("TEST RESULTS SUMMARY")
-          print("=" * 80)
-
-          # Check shape match
-          if actual_df.shape != expected_df.shape:
-              print(f"✗ Shape mismatch!")
-              print(f"  Expected: {expected_df.shape[0]} rows × {expected_df.shape[1]} columns")
-              print(f"  Actual: {actual_df.shape[0]} rows × {actual_df.shape[1]} columns")
-              sys.exit(1)
-
-          # Check column names
-          if list(actual_df.columns) != list(expected_df.columns):
-              print(f"✗ Column mismatch!")
-              print(f"  Expected columns: {list(expected_df.columns)}")
-              print(f"  Actual columns: {list(actual_df.columns)}")
-              sys.exit(1)
-
-          # Cell-by-cell comparison (excluding timestamp columns)
-          mismatches = []
-          skip_columns = ['processed_at']  # Skip dynamic columns
-
-          for row_idx in range(expected_df.shape[0]):
-              for col_name in expected_df.columns:
-                  if col_name in skip_columns:
-                      continue
-
-                  expected_val = expected_df.loc[row_idx, col_name]
-                  actual_val = actual_df.loc[row_idx, col_name]
-
-                  # Try numeric comparison for numeric columns
-                  try:
-                      expected_num = float(expected_val)
-                      actual_num = float(actual_val)
-                      # Allow small floating point difference
-                      if abs(expected_num - actual_num) > 1e-6:
-                          mismatches.append({
-                              'row': row_idx,
-                              'column': col_name,
-                              'expected': expected_val,
-                              'actual': actual_val
-                          })
-                  except (ValueError, TypeError):
-                      # String comparison
-                      if str(expected_val).strip() != str(actual_val).strip():
-                          mismatches.append({
-                              'row': row_idx,
-                              'column': col_name,
-                              'expected': expected_val,
-                              'actual': actual_val
-                          })
-
-          # Calculate statistics
-          total_cells = (expected_df.shape[0] * len([c for c in expected_df.columns if c not in skip_columns]))
-          ok_cells = total_cells - len(mismatches)
-
-          print(f"\n📊 CELL-BY-CELL VERIFICATION")
-          print(f"  Total cells checked: {total_cells}")
-          print(f"  ✅ OK cells: {ok_cells}/{total_cells}")
-          print(f"  ❌ NG cells: {len(mismatches)}")
-
-          # Print actual data
-          print(f"\n📋 ACTUAL DATA FROM ICEBERG")
-          print(actual_df.to_string())
-
-          # Print expected data
-          print(f"\n📋 EXPECTED DATA")
-          print(expected_df.to_string())
-
-          if mismatches:
-              print(f"\n❌ MISMATCHES FOUND:")
-              for mismatch in mismatches:
-                  print(f"  Row {mismatch['row']}, Column '{mismatch['column']}':")
-                  print(f"    Expected: {mismatch['expected']}")
-                  print(f"    Actual: {mismatch['actual']}")
-              sys.exit(1)
-          else:
-              print(f"\n✅ ALL TESTS PASSED!")
-              print("=" * 80)
-
-          EOF
-          )
-
+          # Save output to GITHUB_OUTPUT with preserved formatting
           echo "result<<EOF" >> $GITHUB_OUTPUT
-          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          cat /tmp/e2e_output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         continue-on-error: true
 
