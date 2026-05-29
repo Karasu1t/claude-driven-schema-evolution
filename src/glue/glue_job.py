@@ -95,7 +95,6 @@ try:
     # e.g., "20260529" -> "2026-05-29"
     if len(ver_date) == 8 and ver_date.isdigit():
         partition_date = f"{ver_date[:4]}-{ver_date[4:6]}-{ver_date[6:8]}"
-        print(f"DEBUG: Partition date: {partition_date}")
         logger.info(f"Partition date: {partition_date}")
     else:
         raise ValueError(f"Invalid VER_DATE format: {ver_date}. Expected yyyymmdd")
@@ -107,29 +106,22 @@ try:
         f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
     ]
     
-    print(f"DEBUG: csv_candidates = {csv_candidates}")
     csv_path = None
     for candidate in csv_candidates:
-        print(f"DEBUG: Attempting to probe candidate: {candidate}")
         try:
             # Try to read just the header/first row
             probe_df = spark.read.csv(candidate, header=True)
             csv_path = candidate
-            print(f"DEBUG: ✓ Successfully found file: {csv_path}")
-            logger.info(f"✓ Found CSV file: {csv_path}")
+            logger.info(f"Found CSV file: {csv_path}")
             break
         except Exception as probe_e:
-            print(f"DEBUG: ✗ Candidate not found: {candidate} ({str(probe_e)[:50]})")
             logger.debug(f"Candidate {candidate} not found")
             continue
     
     if not csv_path:
         csv_path = csv_candidates[1]  # Fallback to default pattern
-        print(f"DEBUG: Using fallback: {csv_path}")
         logger.info(f"Using fallback pattern: {csv_path}")
     
-    print(f"DEBUG: Final csv_path = {csv_path}")
-    print(f"DEBUG: INPUT_BUCKET = {args['INPUT_BUCKET']}")
     logger.info(f"Reading CSV: {csv_path}")
     
     # Define schema manually for reliability
@@ -144,35 +136,17 @@ try:
         StructField("video_duration_minutes", DoubleType(), True)
     ])
     
-    # Try direct read first
+    # Read CSV with explicit schema
     try:
-        print(f"DEBUG: Attempting to read CSV from: {csv_path}")
-        logger.info(f"Attempting to read CSV from: {csv_path}")
         df = spark.read.csv(
             csv_path,
             header=True, schema=schema, mode="PERMISSIVE", encoding="utf-8"
         )
         record_count = df.count()
-        print(f"DEBUG: record_count = {record_count}")
         logger.info(f"Successfully read {record_count} records from CSV")
     except Exception as e:
         logger.error(f"Failed to read CSV: {str(e)}")
         raise
-    
-    if record_count == 0:
-        logger.warning(f"CSV is EMPTY! Attempting diagnostics...")
-        try:
-            # Try reading without header to see raw content
-            raw_df = spark.read.text(csv_path)
-            raw_count = raw_df.count()
-            logger.warning(f"Raw text file has {raw_count} lines")
-            raw_df.show(10, truncate=False)
-        except Exception as diag_e:
-            logger.error(f"Diagnostic read failed: {str(diag_e)}")
-    
-    # Show first few rows for debugging
-    logger.info("First 5 rows of CSV:")
-    df.show(5, truncate=False)
     
     # Schema evolution
     for col_name in ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes']:
