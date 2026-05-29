@@ -2,15 +2,9 @@ name: E2E Test - Iceberg ETL Pipeline
 
 on:
   workflow_dispatch:
-    inputs:
-      test_date:
-        description: "Test date (YYYYMMDD format)"
-        required: true
-        default: "20260529"
 
 env:
   AWS_REGION: ap-northeast-1
-  TEST_CSV_DATE: ${{ github.event.inputs.test_date }}
 
 jobs:
   test:
@@ -34,24 +28,28 @@ jobs:
 
       - name: Upload test CSV to S3
         run: |
-          TEST_DATE="${{ env.TEST_CSV_DATE }}"
-          TEST_BUCKET="dev-karasuit-raw-bucket-test"
+          # Get today's date and format as YYYYMMDD
+          TODAY=$(date +%Y%m%d)
+          TEST_BUCKET="dev-karasuit-test-raw-bucket"
 
           # Test CSV is managed in Git as sns_advertisement_yyyymmdd.csv
-          # Replace yyyymmdd with actual test date and upload to S3
+          # Copy and rename with today's date - Glue will extract date from filename
           cp test_data/sns_advertisement_yyyymmdd.csv \
-            /tmp/sns_advertisement_${TEST_DATE}.csv
+            /tmp/sns_advertisement_${TODAY}.csv
 
-          aws s3 cp "/tmp/sns_advertisement_${TEST_DATE}.csv" \
-            "s3://${TEST_BUCKET}/sns_advertisement_${TEST_DATE}.csv" \
+          aws s3 cp "/tmp/sns_advertisement_${TODAY}.csv" \
+            "s3://${TEST_BUCKET}/sns_advertisement_${TODAY}.csv" \
             --region ap-northeast-1
-          echo "✓ Uploaded test CSV (yyyymmdd → ${TEST_DATE}) to S3 (test bucket)"
+          echo "✓ Uploaded test CSV (sns_advertisement_${TODAY}.csv) to S3 (test bucket)"
+
+          # Save date for use in expected output
+          echo "TEST_DATE=${TODAY}" >> $GITHUB_ENV
 
       - name: Trigger Glue Job
         run: |
-          TEST_DATE="${{ env.TEST_CSV_DATE }}"
-          TEST_RAW_BUCKET="dev-karasuit-raw-bucket-test"
-          TEST_PROCESSED_BUCKET="dev-karasuit-processed-bucket-test"
+          TEST_DATE="${{ env.TEST_DATE }}"
+          TEST_RAW_BUCKET="dev-karasuit-test-raw-bucket"
+          TEST_PROCESSED_BUCKET="dev-karasuit-test-processed-bucket"
 
           # Trigger Lambda with test bucket in payload
           PAYLOAD='{"Records":[{"s3":{"bucket":{"name":"'${TEST_RAW_BUCKET}'"},"object":{"key":"sns_advertisement_'${TEST_DATE}'.csv"}}}]}'
@@ -71,7 +69,7 @@ jobs:
 
       - name: Prepare expected output CSV
         run: |
-          TEST_DATE="${{ env.TEST_CSV_DATE }}"
+          TEST_DATE="${{ env.TEST_DATE }}"
           # Convert YYYYMMDD to YYYY-MM-DD format
           PARTITION_DATE=$(date -d "${TEST_DATE:0:4}-${TEST_DATE:4:2}-${TEST_DATE:6:2}" +%Y-%m-%d)
 
@@ -82,7 +80,7 @@ jobs:
       - name: Query Iceberg Table (Full Data)
         run: |
           TEST_DB="dev_karasuit_iceberg_db_test"
-          TEST_RESULTS_BUCKET="dev-karasuit-processed-bucket-test"
+          TEST_RESULTS_BUCKET="dev-karasuit-test-processed-bucket"
           QUERY="SELECT * FROM ${TEST_DB}.video_advertisement ORDER BY video_title;"
 
           QUERY_ID=$(aws athena start-query-execution \
@@ -118,18 +116,18 @@ jobs:
 
       - name: Download Athena Results
         run: |
-          aws s3 cp "s3://dev-karasuit-processed-bucket-test/${ATHENA_QUERY_ID}.csv" \
+          aws s3 cp "s3://dev-karasuit-test-processed-bucket/${ATHENA_QUERY_ID}.csv" \
             "/tmp/athena_result.csv" \
             --region ap-northeast-1 || echo "Standard result file not found, trying manifest"
 
           # If the above fails, try to find the actual result file
           if [ ! -f "/tmp/athena_result.csv" ]; then
-            RESULT_FILES=$(aws s3 ls s3://dev-karasuit-processed-bucket-test/ \
+            RESULT_FILES=$(aws s3 ls s3://dev-karasuit-test-processed-bucket/ \
               --recursive --region ap-northeast-1 | grep "$ATHENA_QUERY_ID" | grep -v ".txt" | awk '{print $NF}')
             
             if [ ! -z "$RESULT_FILES" ]; then
               FILE=$(echo "$RESULT_FILES" | head -1)
-              aws s3 cp "s3://dev-karasuit-processed-bucket-test/$FILE" \
+              aws s3 cp "s3://dev-karasuit-test-processed-bucket/$FILE" \
                 "/tmp/athena_result.csv" \
                 --region ap-northeast-1
             fi
