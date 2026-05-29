@@ -14,11 +14,9 @@ jobs:
   terraform:
     if: github.actor == 'Karasu1t'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: terraform/env/dev/aws
     env:
       AWS_REGION: ap-northeast-1
+      TF_DIR: terraform/env/dev/aws
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,10 +44,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform init
+        run: cd "${TF_DIR}" && terraform init
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        run: cd "${TF_DIR}" && terraform plan -out=tfplan
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: cd "${TF_DIR}" && terraform apply -auto-approve tfplan
