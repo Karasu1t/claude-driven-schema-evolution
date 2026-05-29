@@ -13,7 +13,7 @@ resource "aws_glue_job" "etl_job" {
   }
 
   default_arguments = {
-    "--job-bookmark-option"   = "job-bookmark-enable"
+    "--job-bookmark-option"   = var.environment == "dev" ? "job-bookmark-disable" : "job-bookmark-enable"
     "--INPUT_BUCKET"          = var.input_bucket
     "--OUTPUT_BUCKET"         = var.output_bucket
     "--datalake-formats"      = "iceberg"

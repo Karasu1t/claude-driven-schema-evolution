@@ -115,22 +115,33 @@ try:
         StructField("video_duration_minutes", DoubleType(), True)
     ])
     
-    df = spark.read.csv(
-        csv_path,
-        header=True, schema=schema, mode="PERMISSIVE"
-    )
-    record_count = df.count()
-    logger.info(f"Read {record_count} records from {ver_date}")
+    # Try direct read first
+    try:
+        logger.info(f"Attempting to read CSV from: {csv_path}")
+        df = spark.read.csv(
+            csv_path,
+            header=True, schema=schema, mode="PERMISSIVE"
+        )
+        record_count = df.count()
+        logger.info(f"Successfully read {record_count} records from CSV")
+    except Exception as e:
+        logger.error(f"Failed to read CSV: {str(e)}")
+        raise
     
     if record_count == 0:
-        logger.warning(f"WARNING: CSV is empty! Path: {csv_path}")
-        # Try to list S3 contents
-        import subprocess
-        subprocess.run(["aws", "s3", "ls", f"s3://{args['INPUT_BUCKET']}/"], capture_output=False)
+        logger.warning(f"CSV is EMPTY! Attempting diagnostics...")
+        try:
+            # Try reading without header to see raw content
+            raw_df = spark.read.text(csv_path)
+            raw_count = raw_df.count()
+            logger.warning(f"Raw text file has {raw_count} lines")
+            raw_df.show(10, truncate=False)
+        except Exception as diag_e:
+            logger.error(f"Diagnostic read failed: {str(diag_e)}")
     
     # Show first few rows for debugging
-    logger.info("First 5 rows:")
-    df.show(5)
+    logger.info("First 5 rows of CSV:")
+    df.show(5, truncate=False)
     
     # Schema evolution
     for col_name in ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes']:
