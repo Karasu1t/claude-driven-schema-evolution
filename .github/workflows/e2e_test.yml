@@ -74,7 +74,7 @@ jobs:
           TEST_DATE="${{ env.TEST_CSV_DATE }}"
           # Convert YYYYMMDD to YYYY-MM-DD format
           PARTITION_DATE=$(date -d "${TEST_DATE:0:4}-${TEST_DATE:4:2}-${TEST_DATE:6:2}" +%Y-%m-%d)
-          
+
           # Replace yyyy-mm-dd placeholder with actual partition date
           sed "s/yyyy-mm-dd/${PARTITION_DATE}/g" test_data/expected_output.csv > /tmp/expected_output.csv
           echo "✓ Prepared expected output (partition_date: ${PARTITION_DATE})"
