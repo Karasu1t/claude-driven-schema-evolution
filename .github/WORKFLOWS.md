@@ -1,10 +1,105 @@
 # CI/CD Workflows - Iceberg ETL Pipeline
 
-自動デプロイ、テスト、インフラ破棄のための GitHub Actions ワークフロー
+自動デプロイ、テスト（UT + E2E）、インフラ破棄のための GitHub Actions ワークフロー
+
+## 📋 Workflow Overview
+
+| Workflow | Type | Trigger | Purpose |
+|----------|------|---------|---------|
+| `unit_test.yml` | UT | `push` to src/glue or tests/ | Pytest schema logic validation |
+| `terraform_apply.yml` | Infrastructure | `push` to main | Auto-deploy AWS resources |
+| `e2e_test.yml` | E2E | Manual `workflow_dispatch` | End-to-end pipeline verification |
+| `terraform_destroy.yml` | Infrastructure | Manual (requires confirm) | Safe infrastructure teardown |
+
+---
+
+## 🧪 Test Strategy
+
+### Unit Tests (UT)
+
+**Purpose:** Validate Glue Job logic without AWS resources
+
+- UT-2: VER_DATE argument validation (required, error handling)
+- UT-3: Schema evolution (missing columns auto-added)
+- Coverage: Metadata addition, column ordering
+
+**Speed:** ⚡ Seconds (no AWS resources)
+
+**Cost:** 💰 Free (local Spark session)
+
+**Location:** `tests/test_glue_job.py`
+
+---
+
+### End-to-End Tests (E2E)
+
+**Purpose:** Verify complete pipeline: CSV → Lambda → Glue → Athena
+
+- CSV upload to S3 raw bucket
+- Lambda triggers Glue Job
+- Glue transforms data and writes Iceberg table
+- Athena queries verify data integrity
+
+**Speed:** 🐌 5-10 minutes (includes job execution)
+
+**Cost:** 💵 On-demand AWS resource usage
+
+**Location:** `.github/workflows/e2e_test.yml`
+
+---
 
 ## 📋 Available Workflows
 
-### 1. `terraform_apply.yml` - Auto Deploy Infrastructure
+### 1. `unit_test.yml` - Unit Tests
+
+**Trigger:**
+
+- `push` to branches (src/glue/** or tests/**)
+- Manual: `workflow_dispatch`
+- Pull requests with test changes
+
+**What It Does:**
+
+1. ✅ Checkout code
+2. ✅ Install pytest + pyspark
+3. ✅ Run pytest test suite
+4. ✅ Generate coverage report
+5. ✅ Test on Python 3.9 & 3.11
+
+**Test Cases:**
+
+```
+✓ VER_DATE validation (required argument)
+✓ VER_DATE extraction (parse from sys.argv)
+✓ Schema evolution (add missing columns)
+✓ Metadata addition (processed_at, glue_job_run_id)
+✓ Column order preservation
+```
+
+**Usage:**
+
+```bash
+# Automatic: Push code changes
+git push origin main
+
+# Manual: GitHub Actions → unit_test.yml → "Run workflow"
+
+# Local test:
+cd tests && pip install -r requirements.txt
+pytest test_glue_job.py -v
+```
+
+**Output:**
+
+```
+test_glue_job.py::TestVERDateValidation::test_ver_date_extraction_valid PASSED
+test_glue_job.py::TestSchemaEvolution::test_schema_evolution_add_missing_columns PASSED
+...
+```
+
+---
+
+### 2. `terraform_apply.yml` - Auto Deploy Infrastructure
 
 **Trigger:**
 
@@ -17,7 +112,6 @@
 2. ✅ Configure AWS credentials (from GitHub Secrets)
 3. ✅ Terraform init → plan → apply
 4. ✅ Deploy: Glue Job, Lambda, EventBridge, S3, Athena, IAM
-5. ✅ Output deployment summary
 
 **Files Monitored:**
 
@@ -38,7 +132,44 @@ git push origin main
 
 ---
 
-### 2. `terraform_destroy.yml` - Safe Infrastructure Teardown
+### 3. `e2e_test.yml` - End-to-End Testing
+
+**Trigger:**
+
+- Manual: `workflow_dispatch`
+
+**What It Does:**
+
+1. ✅ Create test CSV (default: 20260529, customizable)
+2. ✅ Upload to S3 raw bucket
+3. ✅ Invoke Lambda function
+4. ✅ Wait 90 seconds for Glue Job execution
+5. ✅ Query Athena to verify Iceberg table
+6. ✅ Validate data integrity
+
+**Test Data:**
+
+```
+3 sample rows:
+- test_video_1, test_video_2, test_video_3
+- Channels: TestChannel1, TestChannel2, TestChannel3
+- Views range: 50K-100K
+```
+
+**Usage:**
+
+```bash
+# Default date (20260529)
+GitHub Actions → e2e_test.yml → "Run workflow"
+
+# Custom date
+GitHub Actions → e2e_test.yml → "Run workflow"
+Input: test_date = "YYYYMMDD" (e.g., "20260530")
+```
+
+---
+
+### 4. `terraform_destroy.yml` - Safe Infrastructure Teardown
 
 **Trigger:**
 
@@ -66,39 +197,42 @@ Must type: "confirm" (prevents accidental destruction)
 
 ---
 
-### 3. `integration_test.yml` - End-to-End Testing
+## 📊 Typical Workflow Sequences
 
-**Trigger:**
-
-- Manual: `workflow_dispatch`
-
-**What It Does:**
-
-1. ✅ Create test CSV (default: 20260529)
-2. ✅ Upload to S3 raw bucket
-3. ✅ Invoke Lambda function
-4. ✅ Wait 90 seconds for Glue Job
-5. ✅ Query Athena to verify data
-6. ✅ Report test results
-
-**Test Data:**
+### Sequence A: Local Dev → Auto Test → Deploy
 
 ```
-3 sample rows:
-- test_video_1, test_video_2, test_video_3
-- Channels: TestChannel1, TestChannel2, TestChannel3
-- Views range: 50K-100K
+1. Modify: src/glue/glue_job.py
+2. git push origin main
+   ↓
+3. unit_test.yml (auto)
+   └─ Pytest: UT-2, UT-3, etc. ← PASS/FAIL feedback in 30 seconds
+   ↓
+4. terraform_apply.yml (auto)
+   └─ Deploy AWS resources ← Ready in 2-3 minutes
+   ↓
+5. e2e_test.yml (manual)
+   └─ Full pipeline verification ← Ready in 5-10 minutes
 ```
 
-**Usage:**
+### Sequence B: Test Before Deploy
 
-```bash
-# Default date (20260529)
-GitHub Actions → integration_test.yml → "Run workflow"
+```
+1. Create feature branch
+2. Push changes
+3. unit_test.yml runs automatically
+4. Create PR with test results
+5. Review + merge
+6. terraform_apply.yml auto-deploys
+7. Run e2e_test.yml manually for verification
+```
 
-# Custom date
-GitHub Actions → integration_test.yml → "Run workflow"
-Input: test_date = "YYYYMMDD" (e.g., "20260530")
+### Sequence C: Emergency Teardown
+
+```
+1. GitHub Actions → terraform_destroy.yml
+2. Input: confirm_destroy = "confirm"
+3. ⚠️ All resources deleted in 2-3 minutes
 ```
 
 ---
@@ -119,9 +253,9 @@ AWS_REGION (optional, defaults to ap-northeast-1)
 
 **All workflows are restricted to Karasu1t only.**
 
-- Trigger: `if: github.actor == 'Karasu1t'`
+- Condition: `if: github.actor == 'Karasu1t'`
 - Effect: Only the owner can execute workflows
-- Reason: Prevent unauthorized AWS resource creation/deletion (cost & security)
+- Reason: Prevent unauthorized AWS resource creation/deletion
 
 **What happens if someone else tries to run:**
 
@@ -131,7 +265,6 @@ Message: "Skipped due to condition: github.actor == 'Karasu1t'"
 ```
 
 This prevents:
-
 - ❌ Unauthorized AWS resource creation
 - ❌ Cost overruns from accidental/malicious deployment
 - ❌ Infrastructure destruction by unknown users
@@ -139,50 +272,7 @@ This prevents:
 
 ---
 
-## 📊 Typical Workflow Sequence
-
-### Option A: Deploy + Test
-
-```
-1. terraform_apply.yml (auto or manual)
-   ↓
-2. integration_test.yml (manual)
-   ↓
-3. Verify results in AWS Console
-```
-
-### Option B: Code Change → Auto Deploy
-
-```
-1. Modify: terraform/modules/*.tf or src/glue/glue_job.py
-2. git push origin main
-   ↓
-3. terraform_apply.yml (auto)
-   ↓
-4. Manual test via integration_test.yml
-```
-
-### Option C: Clean Up
-
-```
-1. terraform_destroy.yml (manual, requires confirmation)
-   ↓
-2. All resources deleted
-```
-
----
-
-## ⚠️ Important Notes
-
-1. **AWS Credentials**: Must be set as GitHub Secrets
-2. **Region**: Hardcoded to `ap-northeast-1` (modify if needed)
-3. **Cost**: Terraform will create actual AWS resources (incurs charges)
-4. **Test Isolation**: Integration tests use actual AWS resources (not mocked)
-5. **Destroy Safety**: Requires explicit "confirm" input to prevent accidents
-
----
-
-## 🚀 First-Time Setup
+## 📝 First-Time Setup
 
 ### Step 1: Add GitHub Secrets
 
@@ -196,19 +286,27 @@ Name: AWS_SECRET_ACCESS_KEY
 Value: <your-aws-secret-key>
 ```
 
-### Step 2: Deploy Infrastructure
+### Step 2: Run Unit Tests
+
+```
+GitHub Actions → unit_test.yml → "Run workflow"
+→ Should PASS in 30 seconds
+```
+
+### Step 3: Deploy Infrastructure
 
 ```
 GitHub Actions → terraform_apply → "Run workflow" → Wait 2-3 min
 ```
 
-### Step 3: Run Integration Test
+### Step 4: Run E2E Test
 
 ```
-GitHub Actions → integration_test → "Run workflow" (test_date=20260529)
+GitHub Actions → e2e_test → "Run workflow" (test_date=20260529)
+→ Should PASS in 5-10 min
 ```
 
-### Step 4: Verify in AWS Console
+### Step 5: Verify in AWS Console
 
 ```
 - Glue: dev-karasuit-schema-evolution-etl job
@@ -218,40 +316,43 @@ GitHub Actions → integration_test → "Run workflow" (test_date=20260529)
 
 ---
 
-## 📝 Customization
-
-**Change Glue Job Parameters:**
-Edit: `terraform/modules/aws/glue_job/glue_job.tf`
-→ terraform_apply will auto-update
-
-**Change Test Data:**
-Edit: `integration_test.yml` → Create test CSV section
-
-**Change Deployment Region:**
-Edit: `env: AWS_REGION: ap-northeast-1` in each workflow
-
-**Add More Triggers:**
-Edit: `on:` section in each workflow (add webhooks, schedules, etc.)
-
----
-
 ## 🐛 Troubleshooting
 
-| Issue                 | Solution                                          |
-| --------------------- | ------------------------------------------------- |
-| AWS credentials error | Verify GitHub Secrets are set correctly           |
-| Terraform init fails  | Check AWS region and IAM permissions              |
-| Glue Job timeout      | Increase timeout in glue_job.tf (default: 30 min) |
-| Athena query fails    | Wait 2 min after Glue Job completes               |
-| Cost spike            | Run terraform_destroy to clean up resources       |
+| Issue | Solution |
+|-------|----------|
+| Unit tests fail locally | `pip install -r tests/requirements.txt && pytest tests/` |
+| AWS credentials error | Verify GitHub Secrets are set correctly |
+| Terraform init fails | Check AWS region and IAM permissions |
+| Glue Job timeout | Increase timeout in terraform/modules/aws/glue_job/glue_job.tf |
+| Athena query fails | Wait 2 min after Glue Job completes |
+| Permission denied on workflow | Only Karasu1t can run workflows (by design) |
 
 ---
 
-## Next Steps
+## 📦 Test Requirements
 
-- [ ] Set up GitHub Secrets (AWS credentials)
-- [ ] Test terraform_apply workflow
-- [ ] Run integration_test with sample data
-- [ ] Monitor CloudWatch logs for Glue Job
-- [ ] Verify Athena queries return data
-- [ ] Document any customizations
+**Unit Test Dependencies** (`tests/requirements.txt`)
+
+```
+pytest==7.4.3
+pytest-cov==4.1.0
+pyspark==3.5.0
+```
+
+**Install Locally:**
+
+```bash
+pip install -r tests/requirements.txt
+pytest tests/test_glue_job.py -v --cov=src/glue
+```
+
+---
+
+## 🚀 Next Enhancements
+
+- [ ] Add integration tests (partial AWS resource testing)
+- [ ] Add performance benchmarks
+- [ ] Add schema validation tests
+- [ ] Add Iceberg-specific tests (time-travel, snapshots)
+- [ ] Add monitoring/alerting dashboards
+- [ ] Add cost estimation per workflow
