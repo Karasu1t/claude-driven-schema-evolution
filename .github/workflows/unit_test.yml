@@ -38,20 +38,23 @@ jobs:
       - name: Run pytest
         id: pytest
         run: |
-          pytest tests/test_glue_job.py -v --tb=short
+          OUTPUT=$(pytest tests/test_glue_job.py -v --tb=short 2>&1)
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Comment on PR with Test Results
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
-        env:
-          PYTEST_STATUS: ${{ steps.pytest.outcome }}
         with:
           script: |
-            const status = process.env.PYTEST_STATUS === 'success' ? '✅ PASSED' : '❌ FAILED';
+            const output = `${{ steps.pytest.outputs.result }}`;
+            const status = `${{ steps.pytest.outcome }}` === 'success' ? '✅ PASSED' : '❌ FAILED';
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🧪 Unit Test Results\n\n${status}\n\nDetails: Check the GitHub Actions workflow logs for full pytest output.`
+              body: `## 🧪 Unit Test Results\n\n${status}\n\n\`\`\`\n${output}\n\`\`\``
+            });
