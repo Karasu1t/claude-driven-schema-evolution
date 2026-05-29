@@ -62,6 +62,7 @@ resource "aws_iam_role_policy" "glue_job_policy" {
       {
         Effect = "Allow"
         Action = [
+          "glue:CreateDatabase",
           "glue:GetDatabase",
           "glue:GetDatabases",
           "glue:GetTable",
