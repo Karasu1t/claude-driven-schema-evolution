@@ -101,7 +101,28 @@ try:
         raise ValueError(f"Invalid VER_DATE format: {ver_date}. Expected yyyymmdd")
     
     # Read CSV with specific date
-    csv_path = f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
+    # Try multiple filename patterns
+    csv_candidates = [
+        f"s3://{args['INPUT_BUCKET']}/sns_advertisement_{ver_date}.csv",
+        f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
+    ]
+    
+    csv_path = None
+    for candidate in csv_candidates:
+        print(f"DEBUG: Trying candidate: {candidate}")
+        try:
+            # Quick test read to check if file is accessible
+            spark.read.csv(candidate, header=True, nRows=1)
+            csv_path = candidate
+            print(f"DEBUG: Found accessible file: {csv_path}")
+            break
+        except:
+            continue
+    
+    if not csv_path:
+        csv_path = csv_candidates[1]  # Fallback to default pattern
+        print(f"DEBUG: Using fallback: {csv_path}")
+    
     print(f"DEBUG: csv_path = {csv_path}")
     print(f"DEBUG: INPUT_BUCKET = {args['INPUT_BUCKET']}")
     logger.info(f"Reading CSV: {csv_path}")
@@ -124,7 +145,7 @@ try:
         logger.info(f"Attempting to read CSV from: {csv_path}")
         df = spark.read.csv(
             csv_path,
-            header=True, schema=schema, mode="PERMISSIVE"
+            header=True, schema=schema, mode="PERMISSIVE", encoding="utf-8"
         )
         record_count = df.count()
         print(f"DEBUG: record_count = {record_count}")
