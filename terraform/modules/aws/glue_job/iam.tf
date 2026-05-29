@@ -40,7 +40,9 @@ resource "aws_iam_role_policy" "glue_job_policy" {
         ]
         Resource = [
           "arn:aws:s3:::${var.input_bucket}",
-          "arn:aws:s3:::${var.input_bucket}/*"
+          "arn:aws:s3:::${var.input_bucket}/*",
+          "arn:aws:s3:::${replace(var.input_bucket, "raw-bucket", "test-raw-bucket")}",
+          "arn:aws:s3:::${replace(var.input_bucket, "raw-bucket", "test-raw-bucket")}/*"
         ]
       },
       {
@@ -56,7 +58,9 @@ resource "aws_iam_role_policy" "glue_job_policy" {
         ]
         Resource = [
           "arn:aws:s3:::${var.output_bucket}",
-          "arn:aws:s3:::${var.output_bucket}/*"
+          "arn:aws:s3:::${var.output_bucket}/*",
+          "arn:aws:s3:::${replace(var.output_bucket, "processed-bucket", "test-processed-bucket")}",
+          "arn:aws:s3:::${replace(var.output_bucket, "processed-bucket", "test-processed-bucket")}/*"
         ]
       },
       {
