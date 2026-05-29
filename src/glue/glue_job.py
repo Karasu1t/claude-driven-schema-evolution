@@ -103,9 +103,21 @@ try:
     csv_path = f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
     logger.info(f"Reading CSV: {csv_path}")
     
+    # Define schema manually for reliability
+    from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType
+    
+    schema = StructType([
+        StructField("video_title", StringType(), True),
+        StructField("views", LongType(), True),
+        StructField("channel_name", StringType(), True),
+        StructField("channel_subscribers", LongType(), True),
+        StructField("likes", LongType(), True),
+        StructField("video_duration_minutes", DoubleType(), True)
+    ])
+    
     df = spark.read.csv(
         csv_path,
-        header=True, inferSchema=True, mode="PERMISSIVE"
+        header=True, schema=schema, mode="PERMISSIVE"
     )
     logger.info(f"Read {df.count()} records from {ver_date}")
     
