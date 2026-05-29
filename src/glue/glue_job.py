@@ -95,12 +95,15 @@ try:
     # e.g., "20260529" -> "2026-05-29"
     if len(ver_date) == 8 and ver_date.isdigit():
         partition_date = f"{ver_date[:4]}-{ver_date[4:6]}-{ver_date[6:8]}"
+        print(f"DEBUG: Partition date: {partition_date}")
         logger.info(f"Partition date: {partition_date}")
     else:
         raise ValueError(f"Invalid VER_DATE format: {ver_date}. Expected yyyymmdd")
     
     # Read CSV with specific date
     csv_path = f"s3://{args['INPUT_BUCKET']}/_{ver_date}.csv"
+    print(f"DEBUG: csv_path = {csv_path}")
+    print(f"DEBUG: INPUT_BUCKET = {args['INPUT_BUCKET']}")
     logger.info(f"Reading CSV: {csv_path}")
     
     # Define schema manually for reliability
@@ -117,12 +120,14 @@ try:
     
     # Try direct read first
     try:
+        print(f"DEBUG: Attempting to read CSV from: {csv_path}")
         logger.info(f"Attempting to read CSV from: {csv_path}")
         df = spark.read.csv(
             csv_path,
             header=True, schema=schema, mode="PERMISSIVE"
         )
         record_count = df.count()
+        print(f"DEBUG: record_count = {record_count}")
         logger.info(f"Successfully read {record_count} records from CSV")
     except Exception as e:
         logger.error(f"Failed to read CSV: {str(e)}")
