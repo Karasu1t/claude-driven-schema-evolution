@@ -19,6 +19,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: |
+          pip install pandas
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
