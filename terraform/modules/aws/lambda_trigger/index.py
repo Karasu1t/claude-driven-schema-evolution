@@ -42,11 +42,18 @@ def lambda_handler(event, context):
         
         # Try to extract date from S3 event
         if 'Records' in event and len(event['Records']) > 0:
-            # S3 event
+            # S3 event - check if this is a test bucket invocation
             record = event['Records'][0]
-            bucket = record['s3']['bucket']['name']
+            bucket_from_event = record['s3']['bucket']['name']
             key = record['s3']['object']['key']
             filename = key.split('/')[-1]
+            
+            # If S3 bucket name contains 'test', override to use test buckets
+            if 'test' in bucket_from_event.lower():
+                input_bucket = 'dev-karasuit-test-raw-bucket'
+                output_bucket = 'dev-karasuit-test-processed-bucket'
+                logger.info(f"Test mode detected from S3 bucket: {bucket_from_event}")
+                logger.info(f"Overridden to test buckets - INPUT: {input_bucket}, OUTPUT: {output_bucket}")
             
             ver_date_raw = extract_date_from_filename(filename)
             if ver_date_raw:
