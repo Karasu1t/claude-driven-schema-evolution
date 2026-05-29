@@ -12,6 +12,7 @@ on:
 
 jobs:
   terraform:
+    if: github.actor == 'Karasu1t'
     runs-on: ubuntu-latest
     defaults:
       run:

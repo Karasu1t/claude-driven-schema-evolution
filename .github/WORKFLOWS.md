@@ -103,7 +103,9 @@ Input: test_date = "YYYYMMDD" (e.g., "20260530")
 
 ---
 
-## 🔐 Required GitHub Secrets
+## 🔐 Security & Access Control
+
+### Required GitHub Secrets
 
 Set these in: Settings → Secrets and variables → Actions
 
@@ -112,6 +114,28 @@ AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_REGION (optional, defaults to ap-northeast-1)
 ```
+
+### Execution Restrictions
+
+**All workflows are restricted to Karasu1t only.**
+
+- Trigger: `if: github.actor == 'Karasu1t'`
+- Effect: Only the owner can execute workflows
+- Reason: Prevent unauthorized AWS resource creation/deletion (cost & security)
+
+**What happens if someone else tries to run:**
+
+```
+Workflow is skipped (not executed)
+Message: "Skipped due to condition: github.actor == 'Karasu1t'"
+```
+
+This prevents:
+
+- ❌ Unauthorized AWS resource creation
+- ❌ Cost overruns from accidental/malicious deployment
+- ❌ Infrastructure destruction by unknown users
+- ❌ Secrets exposure to pull requests
 
 ---
 

@@ -10,6 +10,7 @@ on:
 
 jobs:
   terraform-destroy:
+    if: github.actor == 'Karasu1t'
     runs-on: ubuntu-latest
     defaults:
       run:
