@@ -1,6 +1,10 @@
 name: E2E Test - Iceberg ETL Pipeline
 
 on:
+  pull_request:
+    branches:
+      - dev
+      - main
   workflow_dispatch:
 
 env:
@@ -9,7 +13,7 @@ env:
 
 jobs:
   test:
-    if: github.actor == 'Karasu1t'
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'Karasu1t'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
