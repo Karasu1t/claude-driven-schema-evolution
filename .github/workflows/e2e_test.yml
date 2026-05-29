@@ -5,6 +5,7 @@ on:
 
 env:
   AWS_REGION: ap-northeast-1
+  TZ: Asia/Tokyo
 
 jobs:
   test:
