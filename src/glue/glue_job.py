@@ -143,13 +143,17 @@ try:
     
     # Write with partitioning by date
     # Iceberg automatically optimizes query performance based on partition
-    (df.write
-     .format("iceberg")
-     .mode("overwrite")
-     .option("path", iceberg_path)
-     .option("format-version", "2")
-     .partitionBy("partition_date")
-     .saveAsTable(full_table_qualified, path=iceberg_path))
+    logger.info(f"Writing to Iceberg: {full_table_qualified} at {iceberg_path}")
+    logger.info(f"DataFrame has {df.count()} records")
+    
+    df.write \
+        .format("iceberg") \
+        .mode("overwrite") \
+        .option("path", iceberg_path) \
+        .option("format-version", "2") \
+        .partitionBy("partition_date") \
+        .option("write.parquet.compression-codec", "snappy") \
+        .saveAsTable(full_table_qualified)
     
     logger.info(f"✓ Iceberg: {GLUE_DATABASE}.{TABLE_NAME} (partitioned by date)")
     
