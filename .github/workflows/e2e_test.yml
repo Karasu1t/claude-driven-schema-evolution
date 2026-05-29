@@ -155,6 +155,7 @@ jobs:
       - name: Compare Results with Expected Values
         id: e2e_compare
         run: |
+          set +e
           python3 > /tmp/e2e_output.txt 2>&1 << 'EOF'
           import pandas as pd
           import sys
@@ -254,11 +255,13 @@ jobs:
               print("=" * 80)
 
           EOF
-          || true
+
+          # Capture exit code
+          PYTHON_EXIT=$?
+          set -e
 
           # Save output to GITHUB_OUTPUT with preserved formatting
-          # Capture exit code to determine status
-          if [ $? -eq 0 ]; then
+          if [ $PYTHON_EXIT -eq 0 ]; then
             TEST_STATUS="success"
           else
             TEST_STATUS="failure"
