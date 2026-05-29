@@ -190,16 +190,30 @@ jobs:
                   if col_name in skip_columns:
                       continue
 
-                  expected_val = str(expected_df.loc[row_idx, col_name]).strip()
-                  actual_val = str(actual_df.loc[row_idx, col_name]).strip()
+                  expected_val = expected_df.loc[row_idx, col_name]
+                  actual_val = actual_df.loc[row_idx, col_name]
 
-                  if expected_val != actual_val:
-                      mismatches.append({
-                          'row': row_idx,
-                          'column': col_name,
-                          'expected': expected_val,
-                          'actual': actual_val
-                      })
+                  # Try numeric comparison for numeric columns
+                  try:
+                      expected_num = float(expected_val)
+                      actual_num = float(actual_val)
+                      # Allow small floating point difference
+                      if abs(expected_num - actual_num) > 1e-6:
+                          mismatches.append({
+                              'row': row_idx,
+                              'column': col_name,
+                              'expected': expected_val,
+                              'actual': actual_val
+                          })
+                  except (ValueError, TypeError):
+                      # String comparison
+                      if str(expected_val).strip() != str(actual_val).strip():
+                          mismatches.append({
+                              'row': row_idx,
+                              'column': col_name,
+                              'expected': expected_val,
+                              'actual': actual_val
+                          })
 
           # Calculate statistics
           total_cells = (expected_df.shape[0] * len([c for c in expected_df.columns if c not in skip_columns]))
