@@ -16,13 +16,14 @@ def extract_date_from_filename(filename):
 
 def lambda_handler(event, context):
     """
-    Trigger a Glue Job and extract date from S3 filename
+    Trigger a Glue Job for Phase 3 Iceberg processing with Phase 1-2 fallback
     
     Handles:
     - S3 PUT events from EventBridge/S3
     - Manual trigger via EventBridge schedule
     
     Passes yyyymmdd format to Glue (Glue will convert to yyyy-mm-dd)
+    Glue script handles both Iceberg and Parquet output
     """
     job_name = os.environ['GLUE_JOB_NAME']
     
@@ -47,7 +48,8 @@ def lambda_handler(event, context):
             ver_date_raw = today
             print(f"No date in filename, using today: {ver_date_raw}")
         
-        # Build arguments (pass yyyymmdd format)
+        # Build arguments (pass yyyymmdd format to Glue)
+        # Glue will attempt Iceberg, fallback to Parquet
         arguments = {
             '--VER_DATE': ver_date_raw
         }
@@ -61,7 +63,7 @@ def lambda_handler(event, context):
         return {
             'statusCode': 200,
             'body': json.dumps({
-                'message': f'Glue Job {job_name} started successfully',
+                'message': f'Glue Job {job_name} started (Phase 3: Iceberg with Parquet fallback)',
                 'jobRunId': response['JobRunId'],
                 'verDate': ver_date_raw
             })
