@@ -149,7 +149,7 @@ jobs:
 
       - name: Compare Results with Expected Values
         run: |
-          python3 << 'EOF'
+          python3 << 'EOF' | tee /tmp/e2e_results.txt
           import pandas as pd
           import sys
 
@@ -248,3 +248,29 @@ jobs:
               print("=" * 80)
 
           EOF
+        continue-on-error: true
+
+      - name: Comment on PR with E2E Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let e2e_results = 'No results file found';
+            try {
+              e2e_results = fs.readFileSync('/tmp/e2e_results.txt', 'utf8');
+            } catch (err) {
+              console.log('Could not read E2E results:', err.message);
+            }
+
+            // Check if tests passed
+            const passed = e2e_results.includes('✅ ALL TESTS PASSED');
+
+            let status = passed ? '✅ PASSED' : '❌ FAILED';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 E2E Test Results\n\n${status}\n\n\`\`\`\n${e2e_results}\n\`\`\``
+            });

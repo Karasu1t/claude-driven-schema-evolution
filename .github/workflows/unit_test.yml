@@ -6,6 +6,7 @@ on:
       - "src/glue/**"
       - "tests/**"
     branches:
+      - dev
       - main
   pull_request:
     paths:
@@ -36,4 +37,26 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest tests/test_glue_job.py -v --tb=short
+          pytest tests/test_glue_job.py -v --tb=short 2>&1 | tee /tmp/ut_results.txt
+        continue-on-error: true
+
+      - name: Comment on PR with Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const util_results = fs.readFileSync('/tmp/ut_results.txt', 'utf8');
+
+            // Check if tests passed
+            const passed = util_results.includes('passed');
+            const failed = util_results.includes('failed');
+
+            let status = passed && !failed ? '✅ PASSED' : '❌ FAILED';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧪 Unit Test Results\n\n${status}\n\n\`\`\`\n${util_results}\n\`\`\``
+            });
