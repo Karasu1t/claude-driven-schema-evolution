@@ -54,6 +54,3 @@ jobs:
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
-
-      - name: Destruction Complete
-        run: echo "⚠️  Infrastructure has been destroyed"

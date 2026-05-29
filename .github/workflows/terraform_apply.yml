@@ -53,13 +53,3 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
-
-      - name: Output Deployment Summary
-        run: |
-          echo "=== Iceberg ETL Pipeline Deployed ===" 
-          echo "Region: ap-northeast-1"
-          echo "Database: dev_karasuit_iceberg_db"
-          echo "Table: video_advertisement"
-          echo "Warehouse: s3://dev-karasuit-processed-bucket/iceberg-warehouse/"
-          echo ""
-          echo "Next: Upload test CSV to s3://dev-karasuit-raw-bucket/_YYYYMMDD.csv"

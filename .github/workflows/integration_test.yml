@@ -115,14 +115,3 @@ jobs:
             echo "Status: $STATUS (attempt $i/30)"
             sleep 2
           done
-
-      - name: Test Summary
-        if: success()
-        run: |
-          echo "=== Integration Test PASSED ==="
-          echo "✓ CSV uploaded to raw bucket"
-          echo "✓ Lambda triggered Glue Job"
-          echo "✓ Iceberg table created/updated"
-          echo "✓ Data queryable via Athena"
-          echo ""
-          echo "Next: Verify data in AWS Glue Catalog"
