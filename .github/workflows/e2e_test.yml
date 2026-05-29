@@ -42,17 +42,14 @@ jobs:
             --region ap-northeast-1
           echo "✓ Uploaded test CSV (sns_advertisement_${TODAY}.csv) to S3 (test bucket)"
 
-          # Save date for use in expected output
-          echo "TEST_DATE=${TODAY}" >> $GITHUB_ENV
-
       - name: Trigger Glue Job
         run: |
-          TEST_DATE="${{ env.TEST_DATE }}"
+          TODAY=$(date +%Y%m%d)
           TEST_RAW_BUCKET="dev-karasuit-test-raw-bucket"
           TEST_PROCESSED_BUCKET="dev-karasuit-test-processed-bucket"
 
           # Trigger Lambda with test bucket in payload
-          PAYLOAD='{"Records":[{"s3":{"bucket":{"name":"'${TEST_RAW_BUCKET}'"},"object":{"key":"sns_advertisement_'${TEST_DATE}'.csv"}}}]}'
+          PAYLOAD='{"Records":[{"s3":{"bucket":{"name":"'${TEST_RAW_BUCKET}'"},"object":{"key":"sns_advertisement_'${TODAY}'.csv"}}}]}'
 
           RESPONSE=$(aws lambda invoke \
             --function-name dev-karasuit-glue-job-trigger \
@@ -69,9 +66,9 @@ jobs:
 
       - name: Prepare expected output CSV
         run: |
-          TEST_DATE="${{ env.TEST_DATE }}"
+          TODAY=$(date +%Y%m%d)
           # Convert YYYYMMDD to YYYY-MM-DD format
-          PARTITION_DATE=$(date -d "${TEST_DATE:0:4}-${TEST_DATE:4:2}-${TEST_DATE:6:2}" +%Y-%m-%d)
+          PARTITION_DATE=$(date -d "${TODAY:0:4}-${TODAY:4:2}-${TODAY:6:2}" +%Y-%m-%d)
 
           # Replace yyyy-mm-dd placeholder with actual partition date
           sed "s/yyyy-mm-dd/${PARTITION_DATE}/g" test_data/expected_output.csv > /tmp/expected_output.csv
