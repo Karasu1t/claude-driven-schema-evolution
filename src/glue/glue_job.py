@@ -119,7 +119,18 @@ try:
         csv_path,
         header=True, schema=schema, mode="PERMISSIVE"
     )
-    logger.info(f"Read {df.count()} records from {ver_date}")
+    record_count = df.count()
+    logger.info(f"Read {record_count} records from {ver_date}")
+    
+    if record_count == 0:
+        logger.warning(f"WARNING: CSV is empty! Path: {csv_path}")
+        # Try to list S3 contents
+        import subprocess
+        subprocess.run(["aws", "s3", "ls", f"s3://{args['INPUT_BUCKET']}/"], capture_output=False)
+    
+    # Show first few rows for debugging
+    logger.info("First 5 rows:")
+    df.show(5)
     
     # Schema evolution
     for col_name in ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes']:
@@ -132,28 +143,39 @@ try:
     df = df.withColumn("partition_date", lit(partition_date).cast("date"))
     df = df.withColumn("processed_at", lit(datetime.now().isoformat()).cast("string"))
     
+    logger.info(f"DataFrame before write has {df.count()} rows and {len(df.columns)} columns")
+    
     # Write to Iceberg
     full_table_qualified = f"glue_catalog.{GLUE_DATABASE}.{TABLE_NAME}"
     iceberg_path = f"s3://{ICEBERG_WAREHOUSE.replace('s3://', '')}/{GLUE_DATABASE}.db/{TABLE_NAME}"
     
     try:
         spark.sql(f"DROP TABLE IF EXISTS {full_table_qualified} PURGE")
-    except:
-        pass
+        logger.info(f"Dropped existing table: {full_table_qualified}")
+    except Exception as e:
+        logger.warning(f"Could not drop table: {e}")
     
     # Write with partitioning by date
     # Iceberg automatically optimizes query performance based on partition
     logger.info(f"Writing to Iceberg: {full_table_qualified} at {iceberg_path}")
-    logger.info(f"DataFrame has {df.count()} records")
+    logger.info(f"DataFrame has {df.count()} records before write")
+    logger.info(f"DataFrame columns: {df.columns}")
+    logger.info(f"DataFrame schema: {df.schema}")
     
-    df.write \
-        .format("iceberg") \
-        .mode("overwrite") \
-        .option("path", iceberg_path) \
-        .option("format-version", "2") \
-        .partitionBy("partition_date") \
-        .option("write.parquet.compression-codec", "snappy") \
-        .saveAsTable(full_table_qualified)
+    try:
+        df.write \
+            .format("iceberg") \
+            .mode("overwrite") \
+            .option("path", iceberg_path) \
+            .option("format-version", "2") \
+            .partitionBy("partition_date") \
+            .option("write.parquet.compression-codec", "snappy") \
+            .saveAsTable(full_table_qualified)
+        logger.info(f"✓ Successfully wrote to Iceberg: {full_table_qualified}")
+    except Exception as e:
+        logger.error(f"✗ Failed to write to Iceberg: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        raise
     
     logger.info(f"✓ Iceberg: {GLUE_DATABASE}.{TABLE_NAME} (partitioned by date)")
     
