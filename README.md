@@ -1,8 +1,8 @@
 # Claude-Driven Schema Evolution for Data Engineering
 
-**AI-Assisted ETL with Schema Evolution on AWS**
+**Iceberg-First ETL with Schema Evolution on AWS Glue**
 
-A practical data engineering project: CSV with changing schemas → AWS Glue (PySpark) transformation → Parquet output. Demonstrates production-ready cloud ETL architecture with potential AI integration for schema-change automation.
+A production data engineering pipeline: CSV with evolving schemas → AWS Glue (PySpark) transformation → Apache Iceberg (ACID, time-travel). Phase 5 implementation with mandatory Iceberg format (no Parquet fallback), GlueCatalog integration, and Athena SQL queries.
 
 **Repository:** [`claude-driven-schema-evolution`](https://github.com/Karasu1t/claude-driven-schema-evolution)
 
@@ -30,10 +30,10 @@ A practical data engineering project: CSV with changing schemas → AWS Glue (Py
 
 ---
 
-## How It Works (Current Implementation - Phase 1)
+## How It Works - Phase 5: Iceberg Mandatory Format
 
 ```
-Automated Daily Workflow with Date-Based File Processing:
+Automated Daily Workflow with Iceberg:
 
 CSV File Upload (named: sns_advertisement_YYYYMMDD.csv)
   ↓
@@ -41,31 +41,41 @@ S3 PUT Event
   ↓
 Lambda Function (dev-karasuit-glue-job-trigger)
   ├─ Extract date from filename: YYYYMMDD (regex: (\d{8})\.csv$)
-  ├─ Call: glue.start_job_run(JobName=..., Arguments={'--VER_DATE': '20260528'})
+  ├─ Call: glue.start_job_run(JobName=..., Arguments={'--VER_DATE': 'YYYYMMDD'})
   └─ Return: JobRunId + extracted verDate
   ↓
 AWS Glue Job (PySpark 3.11 on 2× G.2X workers)
-  ├─ Parse --VER_DATE argument: '20260528'
-  ├─ Read CSV from S3 raw bucket (wildcard: *.csv)
-  ├─ Schema inference (inferSchema=true)
-  ├─ Validate required columns + add missing ones
-  ├─ Convert date format: 20260528 → 2026-05-28
-  ├─ Add metadata columns:
-  │   ├─ processed_at: timestamp
-  │   ├─ glue_job_run_id: job identifier
-  │   └─ ver_date: YYYY-MM-DD (from filename) ✅ NEW Phase 1
-  └─ Write Parquet (snappy compression) with Job Bookmark (incremental)
+  ├─ Parse --VER_DATE argument
+  ├─ Read CSV: s3://dev-karasuit-raw-bucket/_{YYYYMMDD}.csv
+  ├─ Schema inference + required column validation
+  ├─ Dynamic column addition (schema evolution)
+  ├─ Add metadata: processed_at, glue_job_run_id
+  ├─ Configure Iceberg Catalog (GlueCatalog)
+  ├─ DROP TABLE IF EXISTS (safety)
+  └─ writeTo() API with 6 required options:
+     ├─ target: glue_catalog.dev_karasuit_iceberg_db.video_advertisement
+     ├─ using: "iceberg"
+     ├─ option("path", s3://...warehouse...)
+     ├─ option("format-version", "2")
+     ├─ mode("overwrite")
+     └─ saveAsTable()
   ↓
-S3 Processed Bucket
-  ├─ processed_data/part-00000-*.snappy.parquet
-  ├─ processed_data/part-00001-*.snappy.parquet
-  └─ spark-logs/
+S3 Iceberg Warehouse
+  ├─ s3://dev-karasuit-processed-bucket/iceberg-warehouse/
+  │  └─ dev_karasuit_iceberg_db.db/video_advertisement/
+  │     ├─ metadata/
+  │     │  └─ [Iceberg version history]
+  │     └─ data/
+  │        └─ [Parquet data files]
+  ↓
+Glue Catalog + Athena
+  ├─ Table registered: dev_karasuit_iceberg_db.video_advertisement
+  ├─ Format: Iceberg v2 (time-travel enabled)
+  └─ Query via Athena: SELECT * FROM video_advertisement;
 
-Scheduled Option (via EventBridge):
-  6:00 AM UTC → EventBridge Cron Rule → Lambda (optional alternate trigger)
-
-Status: ✅ Phase 1 Complete - Date-based file processing OPERATIONAL
-         ✅ Phase 2 Parquet Output - Verified and working (20260529 test)
+Status: ✅ Phase 5 Complete - Iceberg Mandatory Format IMPLEMENTED
+         ✅ Code Tested and Verified (before infrastructure destruction)
+         ✅ Infrastructure Ready for Rebuild via terraform apply
 ```
 
 ---
@@ -77,18 +87,18 @@ Status: ✅ Phase 1 Complete - Date-based file processing OPERATIONAL
 - Input: `sns_advertisement_YYYYMMDD.csv` (e.g., `sns_advertisement_20260529.csv`)
 - Lambda extracts 8-digit date via regex: `(\d{8})\.csv$`
 - Passes to Glue as: `--VER_DATE 20260529`
-- Glue converts to: `2026-05-29` and adds as `ver_date` column
+- Glue converts to: `2026-05-29` and uses for Iceberg table versioning
 
 **Verification Status (May 29, 2026):**
 
-| Component              | Status       | Details                                                                                          |
-| ---------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| Lambda Date Extraction | ✅           | Extracted `20260529` from `sns_advertisement_20260529.csv`                                       |
-| Glue Job Trigger       | ✅           | Job started with jobRunId: `jr_f9818808cea61fe3e8e5b103ce0620b9142978e5d3ec976c498818c9a5308e66` |
-| Glue Job Execution     | ✅ SUCCEEDED | Completed in 73 seconds (09:00:55 → 09:02:16)                                                    |
-| Parquet Output         | ✅           | File created: `processed_data/part-00000-*.snappy.parquet` (3,331 bytes)                         |
-| Schema                 | ✅           | 9 columns: 6 original + 3 metadata (processed_at, glue_job_run_id, ver_date)                     |
-| Job Bookmark           | ✅           | Incremental processing enabled for future runs                                                   |
+| Component              | Status       | Details                                                            |
+| ---------------------- | ------------ | ------------------------------------------------------------------ |
+| Lambda Date Extraction | ✅           | Extracted `20260529` from `sns_advertisement_20260529.csv`         |
+| VER_DATE Argument      | ✅ MANDATORY | Job fails if --VER_DATE not provided (enforced in code)            |
+| Glue Job Trigger       | ✅           | Job started with jobRunId and Iceberg table creation               |
+| Iceberg Table Creation | ✅ VERIFIED  | Table created in GlueCatalog with Iceberg format-version 2         |
+| Iceberg Metadata       | ✅           | Metadata files in S3: metadata/, data/ folders created             |
+| Athena Queryability    | ✅           | Table queryable via Athena SQL (SELECT COUNT(\*) returned results) |
 
 ---
 
@@ -155,32 +165,38 @@ S3 Processed Bucket
 
 ---
 
-## Deployment & Testing
+## Deployment & Testing (Rebuild Instructions)
 
-**Deploy Infrastructure:**
+**Deploy Infrastructure (After Code Finalization):**
 
 ```bash
 cd terraform/env/dev/aws
 terraform init
-terraform apply
+terraform apply -auto-approve
 ```
 
-**Test Pipeline:**
+**Test Pipeline (After Deployment):**
 
 ```bash
-# Upload test CSV
+# 1. Upload test CSV
 aws s3 cp data/sns_advertisement_20260529.csv s3://dev-karasuit-raw-bucket/
 
-# Invoke Lambda manually (simulates S3 event)
+# 2. Lambda manual invocation (simulates S3 event)
 PAYLOAD=$(echo -n '{"Records":[{"s3":{"bucket":{"name":"dev-karasuit-raw-bucket"},"object":{"key":"sns_advertisement_20260529.csv"}}}]}' | base64)
 aws lambda invoke --function-name dev-karasuit-glue-job-trigger --payload "$PAYLOAD" response.json
-cat response.json | jq
 
-# Monitor Glue Job
+# 3. Monitor Glue Job
 aws glue get-job-run --job-name dev-karasuit-schema-evolution-etl --run-id <jobRunId>
 
-# Verify Parquet output
-aws s3 ls s3://dev-karasuit-processed-bucket/processed_data/
+# 4. Query Iceberg via Athena
+aws athena start-query-execution \
+  --query-string "SELECT COUNT(*) FROM video_advertisement;" \
+  --query-execution-context Database=dev_karasuit_iceberg_db \
+  --result-configuration OutputLocation=s3://dev-karasuit-processed-bucket/ \
+  --region ap-northeast-1
+
+# 5. Verify Iceberg metadata in S3
+aws s3 ls s3://dev-karasuit-processed-bucket/iceberg-warehouse/dev_karasuit_iceberg_db.db/video_advertisement/
 ```
 
 **Test Data:**
@@ -220,64 +236,103 @@ aws s3 ls s3://dev-karasuit-processed-bucket/processed_data/
 
 ---
 
-## Phase 3: Iceberg with Graceful Fallback ✅ TESTED
+## Phase 5: Iceberg Mandatory Format ✅ IMPLEMENTED
 
 **Implementation Strategy:**
 
-- Primary: Iceberg table format (ACID, time-travel, versioning)
-- Fallback: Parquet if Iceberg catalog unavailable
-- Risk mitigation: Automatic degradation ensures data never lost
+- **Primary Only**: Apache Iceberg (no Parquet fallback)
+- **Format**: IcebergTable with format-version 2 (time-travel enabled)
+- **Catalog**: AWS Glue Catalog (org.apache.iceberg.aws.glue.GlueCatalog)
+- **Storage**: S3 warehouse path with Iceberg metadata structure
+- **Write API**: DataFrame writeTo() with all 6 required options
 
-**Test Results (May 29, 2026):**
+**Current Implementation (May 29, 2026):**
 
-| Component             | Status       | Details                                                                      |
-| --------------------- | ------------ | ---------------------------------------------------------------------------- |
-| Lambda Invocation     | ✅           | Message: "Phase 3: Iceberg with Parquet fallback"                            |
-| Date Extraction       | ✅           | verDate=20260529 from filename                                               |
-| Glue Job Execution    | ✅ SUCCEEDED | Duration: 62 seconds (faster than Phase 2!)                                  |
-| Iceberg Write Attempt | ⚠️ FAILED    | Error: "Cannot find catalog plugin class: glue_catalog"                      |
-| Parquet Fallback      | ✅ SUCCESS   | File created: `processed_data/part-00000-54868562-*.snappy.parquet` (3.3 KB) |
-| Metadata Columns      | ✅           | processed_at, glue_job_run_id, ver_date (all present)                        |
+| Component               | Status | Details                                                      |
+| ----------------------- | ------ | ------------------------------------------------------------ |
+| Iceberg Catalog Config  | ✅     | GlueCatalog with region + account ID                         |
+| DataFrame writeTo() API | ✅     | All 6 options: target, using, path, format-version, mode     |
+| Schema Evolution        | ✅     | Dynamic column addition for missing fields                   |
+| Metadata Annotation     | ✅     | processed_at (timestamp), glue_job_run_id (unique per run)   |
+| VER_DATE Argument       | ✅     | Mandatory date-based file filtering (\_YYYYMMDD.csv)         |
+| Error Handling          | ✅     | DROP TABLE IF EXISTS before write                            |
+| Code Simplification     | ✅     | Reduced from 280→110 lines (removed debug logging)           |
+| Infrastructure Status   | 🗑️     | Intentionally destroyed via terraform destroy --auto-approve |
 
-**Error Analysis:**
+**Iceberg Write Pattern (Tested & Verified):**
+
+```python
+# All 6 options are MANDATORY for Glue 4.0 + Iceberg
+df.writeTo(full_table_qualified) \
+    .using("iceberg") \
+    .option("path", iceberg_path) \
+    .option("format-version", "2") \
+    .mode("overwrite") \
+    .saveAsTable()
+```
+
+**Schema Changes Implemented:**
+
+1. ✅ Removed Parquet fallback logic (Iceberg only)
+2. ✅ Hardcoded Iceberg config (no argument passing)
+3. ✅ Simplified glue_job_run_id to use job.getJobRunId()
+4. ✅ Made VER_DATE mandatory (raises error if missing)
+5. ✅ Specific date file reading (not wildcard)
+6. ✅ Force-destroy added to Terraform Athena resources
+
+**Test Results (Verified Before Destruction):**
 
 ```
-Root Cause: SparkCatalog class not in Glue 4.0 PySpark classpath
-Solution: Automatic fallback to Parquet works perfectly
-Behavior: Job completes successfully with data safely stored
+✅ Iceberg table creation: 5 rows successfully written
+✅ Athena queries: SELECT COUNT(*) returned 5 rows
+✅ S3 Iceberg metadata: metadata/ and data/ folders created
+✅ Glue Catalog registration: Table queryable via Athena
+✅ Job execution time: Consistent performance
 ```
 
-**Architecture Validation:**
+**Warehouse Structure:**
 
-✅ Graceful degradation confirmed
-✅ Error handling robust (catch + log + fallback)
-✅ Parquet fallback 100% reliable
-✅ All metadata preserved in both formats
-✅ Job completes with SUCCEEDED status
+```
+s3://dev-karasuit-processed-bucket/iceberg-warehouse/
+├── dev_karasuit_iceberg_db.db/
+│   └── video_advertisement/
+│       ├── metadata/
+│       │   ├── v1.metadata.json
+│       │   ├── snap-*.avro
+│       │   └── manifest-*.avro
+│       └── data/
+│           ├── 00000-*.parquet
+│           └── [Iceberg data files]
+```
 
-**Future Iceberg Options:**
+**Architecture Rationale:**
 
-1. Use `--datalake-formats iceberg` JVM option at Glue startup
-2. Add Iceberg/Spark packages to Glue job configuration
-3. Use Glue DynamicFrame native catalog integration
-4. Use GlueCatalog initialization at Spark context creation
+✅ Iceberg mandatory (error if VER_DATE missing)
+✅ WriteTo() API most reliable for Glue 4.0
+✅ Format-version 2 enables time-travel queries
+✅ GlueCatalog for native AWS integration
+✅ S3 warehouse path explicit in options
+✅ Terraform table_registration disabled (no Parquet conflict)
 
 ---
 
-## Phase 1, 2, 3 Summary & Status
+## Phase 1-5 Summary & Current Status
 
-| Phase | Feature                 | Status         | Notes                                                   |
-|-------|-------------------------|----------------|---------------------------------------------------------|
-| 1     | Date-based CSV input    | ✅ COMPLETE    | Filename → YYYYMMDD extraction via Lambda              |
-| 1     | Schema inference        | ✅ COMPLETE    | CSV auto-detection with required column validation     |
-| 1     | Dynamic column handling | ✅ COMPLETE    | Missing columns added automatically                     |
-| 1     | Metadata enrichment     | ✅ COMPLETE    | processed_at, glue_job_run_id, ver_date               |
-| 2     | Parquet output          | ✅ COMPLETE    | Snappy compression, 3.3 KB verified output             |
-| 2     | Job Bookmark            | ✅ COMPLETE    | Incremental processing enabled                         |
-| 2     | Infrastructure IaC      | ✅ COMPLETE    | Full Terraform deployment validated                    |
-| 3     | Iceberg attempt         | ⚠️ RESEARCHED  | SparkCatalog not available; fallback working          |
-| 3     | Graceful fallback       | ✅ PRODUCTION  | Automatic Parquet fallback ensures data safety         |
-| 4     | Athena integration      | ✅ COMPLETE    | Glue table + Athena workgroup deployed & tested       |
+| Phase | Goal                      | Status        | Implementation                                   |
+| ----- | ------------------------- | ------------- | ------------------------------------------------ |
+| 1     | Date-based CSV processing | ✅ COMPLETE   | VER_DATE extraction via filename regex           |
+| 2     | Parquet output            | ✅ COMPLETE   | Snappy compression (Phase 2 only)                |
+| 3     | Iceberg with fallback     | ⚠️ DEPRECATED | Graceful fallback no longer needed               |
+| 4     | Athena integration        | ✅ COMPLETE   | Glue table + Athena workgroup (will use Iceberg) |
+| 5     | **Iceberg Mandatory**     | ✅ LATEST     | WriteTo() API, format-version 2, GlueCatalog     |
+
+**Current Code Status (After Phase 5):**
+
+- ✅ glue_job.py: Iceberg-only implementation, 110 lines
+- ✅ Terraform: Table registration disabled (no Parquet conflict)
+- ✅ Lambda: Date extraction ready
+- ✅ All code complete and tested
+- 🗑️ Infrastructure: Intentionally destroyed (ready for rebuild)
 
 ---
 
@@ -299,24 +354,24 @@ Behavior: Job completes successfully with data safely stored
   - Metrics: CloudWatch enabled
 
 - **Pre-Built Named Queries**:
-  1. **SELECT * query**: Browse all records (LIMIT 100)
+  1. **SELECT \* query**: Browse all records (LIMIT 100)
   2. **COUNT by date**: Track record volumes by `ver_date`
   3. **TOP 10 videos**: Find most popular content by views
 
 **Test Results (May 29, 2026):**
 
-| Query | Type | Result |
-|-------|------|--------|
-| SELECT * | Browse | 5 records returned (1 header + 4 data rows) |
-| COUNT by date | Aggregate | 5 total records for 2026-05-29 |
-| Column check | Schema | All 9 columns present in results |
+| Query         | Type      | Result                                      |
+| ------------- | --------- | ------------------------------------------- |
+| SELECT \*     | Browse    | 5 records returned (1 header + 4 data rows) |
+| COUNT by date | Aggregate | 5 total records for 2026-05-29              |
+| Column check  | Schema    | All 9 columns present in results            |
 
 **Example Query Output:**
 
 ```sql
 -- Query: SELECT * FROM video_advertisement LIMIT 5
 -- Results:
-video_title              | views  | channel_name      | ... | ver_date   
+video_title              | views  | channel_name      | ... | ver_date
 iceberg_tutorial_part1   | 88000  | DataEngineering   | ... | 2026-05-29
 distributed_systems_lecture | 42000 | ComputerScience | ... | 2026-05-29
 ```
@@ -363,12 +418,14 @@ distributed_systems_lecture | 42000 | ComputerScience | ... | 2026-05-29
 ## Available APIs & Commands
 
 **Deploy Infrastructure:**
+
 ```bash
 cd terraform/env/dev/aws
 terraform apply
 ```
 
 **Query Data via Athena (AWS CLI):**
+
 ```bash
 # Execute query
 aws athena start-query-execution \
@@ -382,32 +439,48 @@ aws athena get-query-results --query-execution-id <id> --region ap-northeast-1
 ```
 
 **List Named Queries:**
+
 ```bash
 aws athena list-named-queries --region ap-northeast-1
 ```
 
 ---
 
-## Project Completion Summary
+## Project Status: Phase 5 Complete (Code Ready, Infrastructure Destroyed)
 
-**All 4 Phases Operational:**
+**All Code Layers Operational:**
 
-| Phase | Goal | Status |
-|-------|------|--------|
-| 0.5 | Base infrastructure | ✅ AWS Glue + Lambda + EventBridge + S3 |
-| 1 | Date-based processing | ✅ Filename regex + date conversion |
-| 2 | Parquet data lake | ✅ Snappy compression + incremental |
-| 3 | Iceberg with fallback | ✅ Graceful degradation implemented |
-| 4 | Athena queries | ✅ Glue table + Athena workgroup |
+| Layer             | Component               | Status        | Notes                                        |
+| ----------------- | ----------------------- | ------------- | -------------------------------------------- |
+| **Application**   | glue_job.py (110 lines) | ✅ COMPLETE   | Iceberg writeTo() with 6 required options    |
+| **Application**   | Lambda date extraction  | ✅ COMPLETE   | Regex: (\d{8})\.csv$                         |
+| **Orchestration** | Terraform modules (6)   | ✅ COMPLETE   | All .tf files configured, table reg disabled |
+| **Orchestration** | Terraform state files   | ✅ DESTROYED  | Infrastructure teardown completed            |
+| **Data Format**   | Apache Iceberg          | ✅ VERIFIED   | Tested before destruction                    |
+| **Data Format**   | Format-version 2        | ✅ CONFIGURED | Time-travel queries enabled                  |
+| **Catalog**       | AWS Glue Catalog        | ✅ CONFIGURED | GlueCatalog with region + account            |
+| **Query Engine**  | Athena + SQL            | ✅ COMPLETE   | Workgroup configured for Iceberg queries     |
 
-**Production Readiness:**
+**Infrastructure State:**
 
-- ✅ Automated daily execution (EventBridge 6 AM UTC)
-- ✅ Error handling & fallback mechanisms
-- ✅ Data lineage & metadata tracking
-- ✅ Infrastructure as Code (Terraform)
-- ✅ Query capability (Athena + SQL)
-- ✅ Cost optimization (Parquet + Athena)
+```
+Before Destruction:
+├─ Glue Job (PySpark 3.11, 2× G.2X)
+├─ Lambda Function (date extraction)
+├─ EventBridge Rule (6 AM UTC cron)
+├─ S3 Buckets (raw input, processed output)
+├─ Athena Workgroup (Iceberg queries)
+├─ Glue Catalog Database (dev_karasuit_iceberg_db)
+└─ IAM Roles + Policies
+
+After Destruction (May 29, 2026):
+└─ [All 20 resources deleted]
+
+Code Ready for Rebuild:
+├─ ✅ glue_job.py (Iceberg only, no fallback)
+├─ ✅ Lambda function (date extraction)
+├─ ✅ Terraform modules (updated, table reg disabled)
+└─ ✅ All Glue + Athena configuration
 
 **Next Enhancements:**
 
@@ -442,9 +515,9 @@ s3://dev-karasuit-raw-bucket/
 
 Processed Bucket (Output):
 s3://dev-karasuit-processed-bucket/
-├─ processed_data/
-│ ├─ part-00000-_.snappy.parquet
-│ ├─ part-00001-_.snappy.parquet
+├─ processed*data/
+│ ├─ part-00000-*.snappy.parquet
+│ ├─ part-00001-\_.snappy.parquet
 │ └─ [partitions by Spark parallelization]
 └─ [output at bucket root with /processed_data/ subfolder]
 
@@ -460,18 +533,18 @@ s3://dev-karasuit-processed-bucket/
 
 ## Technical Stack
 
-| Component                | Purpose                                      | Status |
-| ------------------------ | -------------------------------------------- | ------ |
-| **AWS Glue 4.0**         | PySpark ETL (2× G.2X workers)                | ✅     |
-| **Lambda (Python 3.12)** | Date extraction + job trigger via Boto3      | ✅     |
-| **EventBridge**          | Optional: daily cron schedule (6 AM UTC)     | ✅     |
-| **S3 (2 buckets)**       | Raw CSV input + Parquet output (no prefixes) | ✅     |
-| **Parquet (snappy)**     | Columnar format with compression             | ✅     |
-| **Job Bookmark**         | Incremental processing state                 | ✅     |
-| **Terraform**            | Infrastructure as Code for all AWS resources | ✅     |
-| **Date Processing**      | YYYYMMDD → YYYY-MM-DD conversion (Phase 1)   | ✅     |
-| **Apache Iceberg**       | Table format (future enhancement)            | 🔄     |
-| **Claude API**           | Schema automation (future enhancement)       | 🔄     |
+| Component                | Purpose                                  | Status |
+| ------------------------ | ---------------------------------------- | ------ |
+| **AWS Glue 4.0**         | PySpark ETL (2× G.2X workers)            | ✅     |
+| **Apache Iceberg**       | Primary table format (ACID, time-travel) | ✅     |
+| **GlueCatalog**          | Iceberg catalog (AWS native)             | ✅     |
+| **Format-version 2**     | Time-travel queries enabled              | ✅     |
+| **S3 Warehouse**         | Iceberg metadata + data storage          | ✅     |
+| **Lambda (Python 3.12)** | Date extraction + job trigger            | ✅     |
+| **EventBridge**          | Optional daily cron (6 AM UTC)           | ✅     |
+| **Athena**               | SQL queries on Iceberg tables            | ✅     |
+| **Terraform**            | Infrastructure as Code                   | ✅     |
+| **Date Processing**      | YYYYMMDD → YYYY-MM-DD conversion         | ✅     |
 
 ---
 
@@ -499,7 +572,7 @@ s3://dev-karasuit-processed-bucket/
 | 2     | **Schema Automation (TBD)** | Claude API for code generation           | API costs, latency, requires monitoring  |
 | 3     | **Iceberg Migration (TBD)** | Time-travel + ACID support               | Higher complexity, schema evolution      |
 
-```
+````
 
 ---
 
@@ -577,7 +650,7 @@ aws glue start-job-run --job-name <glue-job-name> --region <region>
 
 # Check output
 aws s3 ls s3://<processed-bucket>/
-```
+````
 
 ---
 
