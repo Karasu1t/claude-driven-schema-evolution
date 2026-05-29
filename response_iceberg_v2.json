@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"message\": \"Glue Job dev-karasuit-schema-evolution-etl started successfully\", \"jobRunId\": \"jr_d45df493d3c92073e9573f0e3f7928e563edfd01d0b915da54e49f46470fd570\", \"targetDate\": \"2026/05/29\", \"extractedDate\": \"20260529\"}"}
