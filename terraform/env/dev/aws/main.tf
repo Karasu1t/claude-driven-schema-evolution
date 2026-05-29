@@ -21,6 +21,29 @@ module "s3_lambda_processed_bucket" {
   }
 }
 
+# Test buckets for E2E testing
+module "s3_lambda_raw_bucket_test" {
+  source      = "../../../modules/aws/s3_raw_bucket"
+  project     = "${local.project}-test"
+  environment = local.environment
+
+  tags = {
+    Component = "Storage"
+    Purpose   = "E2E Testing"
+  }
+}
+
+module "s3_lambda_processed_bucket_test" {
+  source      = "../../../modules/aws/s3_processed_bucket"
+  project     = "${local.project}-test"
+  environment = local.environment
+
+  tags = {
+    Component = "Storage"
+    Purpose   = "E2E Testing"
+  }
+}
+
 ##############################################
 # Glue Job for Schema Evolution
 ##############################################
@@ -54,6 +77,8 @@ module "lambda_trigger" {
   environment   = local.environment
   project       = local.project
   glue_job_name = module.glue_etl_job.glue_job_name
+  input_bucket  = module.s3_lambda_raw_bucket.bucket_name
+  output_bucket = module.s3_lambda_processed_bucket.bucket_name
 
   tags = {
     Component = "Orchestration"

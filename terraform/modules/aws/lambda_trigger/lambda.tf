@@ -18,6 +18,8 @@ resource "aws_lambda_function" "glue_trigger" {
   environment {
     variables = {
       GLUE_JOB_NAME = var.glue_job_name
+      INPUT_BUCKET  = var.input_bucket
+      OUTPUT_BUCKET = var.output_bucket
     }
   }
 

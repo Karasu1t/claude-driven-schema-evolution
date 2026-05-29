@@ -11,6 +11,16 @@ output "processed_bucket_name" {
   value       = module.s3_lambda_processed_bucket.bucket_name
 }
 
+output "raw_bucket_name_test" {
+  description = "Name of the test raw data S3 bucket"
+  value       = module.s3_lambda_raw_bucket_test.bucket_name
+}
+
+output "processed_bucket_name_test" {
+  description = "Name of the test processed data S3 bucket"
+  value       = module.s3_lambda_processed_bucket_test.bucket_name
+}
+
 ##############################################
 # Glue Job Outputs
 ##############################################

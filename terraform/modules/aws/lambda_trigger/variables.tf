@@ -18,6 +18,18 @@ variable "glue_job_name" {
   type        = string
 }
 
+variable "input_bucket" {
+  description = "S3 bucket for input CSV data"
+  type        = string
+  default     = "dev-karasuit-raw-bucket"
+}
+
+variable "output_bucket" {
+  description = "S3 bucket for output/Iceberg data"
+  type        = string
+  default     = "dev-karasuit-processed-bucket"
+}
+
 variable "tags" {
   description = "Common tags"
   type        = map(string)

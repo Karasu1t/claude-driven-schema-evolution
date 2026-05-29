@@ -24,13 +24,28 @@ from datetime import datetime
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Iceberg configuration (fixed)
-ICEBERG_WAREHOUSE = "s3://dev-karasuit-processed-bucket/iceberg-warehouse"
-GLUE_DATABASE = "dev_karasuit_iceberg_db"
-TABLE_NAME = "video_advertisement"
-
-# Parse arguments
+# Iceberg configuration
+# Note: Bucket names can be dynamic (prod or test)
+# Defaults provided for backward compatibility
 args = getResolvedOptions(sys.argv, ['JOB_NAME', 'INPUT_BUCKET', 'OUTPUT_BUCKET'])
+input_bucket = args['INPUT_BUCKET']
+output_bucket = args['OUTPUT_BUCKET']
+
+logger.info(f"Input bucket: {input_bucket}")
+logger.info(f"Output bucket: {output_bucket}")
+
+# Determine if running in test mode (bucket contains 'test')
+is_test_mode = 'test' in output_bucket.lower()
+if is_test_mode:
+    ICEBERG_WAREHOUSE = f"s3://{output_bucket}/iceberg-warehouse"
+    GLUE_DATABASE = "dev_karasuit_iceberg_db_test"
+    logger.info("TEST MODE: Using test database and warehouse")
+else:
+    ICEBERG_WAREHOUSE = f"s3://{output_bucket}/iceberg-warehouse"
+    GLUE_DATABASE = "dev_karasuit_iceberg_db"
+    logger.info("PRODUCTION MODE: Using production database and warehouse")
+
+TABLE_NAME = "video_advertisement"
 
 logger.info(f"Job: {args['JOB_NAME']}")
 
