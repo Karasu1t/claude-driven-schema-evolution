@@ -44,6 +44,22 @@ jobs:
             fi
           } > ~/.aws/credentials
 
+      - name: Debug - Check directory structure
+        run: |
+          echo "Current working directory: $(pwd)"
+          echo "Repository root contents:"
+          ls -la
+          echo ""
+          echo "Terraform directory check:"
+          if [ -d "${TF_DIR}" ]; then
+            echo "✓ ${TF_DIR} exists"
+            ls -la "${TF_DIR}"
+          else
+            echo "✗ ${TF_DIR} NOT FOUND"
+            echo "Checking terraform/ directory:"
+            ls -la terraform/ || echo "terraform/ does not exist"
+          fi
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
