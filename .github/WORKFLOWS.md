@@ -1,15 +1,16 @@
 # CI/CD Workflows - Iceberg ETL Pipeline
 
-自動デプロイ、テスト（UT + E2E）、インフラ破棄のための GitHub Actions ワークフロー
+GitHub Actions workflows for automated deployment, testing (UT + E2E), and infrastructure teardown.
 
 ## 📋 Workflow Overview
 
-| Workflow                | Type           | Trigger                      | Purpose                          |
-| ----------------------- | -------------- | ---------------------------- | -------------------------------- |
-| `unit_test.yml`         | UT             | `push` to src/glue or tests/ | Pytest schema logic validation   |
-| `terraform_apply.yml`   | Infrastructure | `push` to main               | Auto-deploy AWS resources        |
-| `e2e_test.yml`          | E2E            | Manual `workflow_dispatch`   | End-to-end pipeline verification |
-| `terraform_destroy.yml` | Infrastructure | Manual (requires confirm)    | Safe infrastructure teardown     |
+| Workflow                | Type           | Trigger                                        | Purpose                                      |
+| ----------------------- | -------------- | ---------------------------------------------- | -------------------------------------------- |
+| `ci.yml`                | CI Pipeline    | `pull_request` → dev / main                    | UT → E2E sequential (E2E skipped if UT fails)|
+| `unit_test.yml`         | UT             | `push` to src/glue or tests/, `workflow_call`  | Pytest schema logic validation               |
+| `e2e_test.yml`          | E2E            | `workflow_call`, `workflow_dispatch`            | End-to-end pipeline verification             |
+| `terraform_apply.yml`   | Infrastructure | `push` to main                                 | Auto-deploy AWS resources                    |
+| `terraform_destroy.yml` | Infrastructure | Manual (requires confirm)                      | Safe infrastructure teardown                 |
 
 ---
 
@@ -19,15 +20,17 @@
 
 **Purpose:** Validate Glue Job logic without AWS resources
 
-- UT-2: VER_DATE argument validation (required, error handling)
-- UT-3: Schema evolution (missing columns auto-added)
-- Coverage: Metadata addition, column ordering
+- VER_DATE argument validation (required, error handling)
+- Schema evolution (missing columns auto-added)
+- Data value and type correctness after transformation
+- Date format conversion (YYYYMMDD → YYYY-MM-DD)
+- Metadata column format validation
 
 **Speed:** ⚡ Seconds (no AWS resources)
 
 **Cost:** 💰 Free (local Spark session)
 
-**Location:** `tests/test_glue_job.py`
+**Location:** `tests/test_glue_job.py` (schema structure), `tests/test_data_transform.py` (data values and types)
 
 ---
 
@@ -50,13 +53,35 @@
 
 ## 📋 Available Workflows
 
+### 0. `ci.yml` - PR Pipeline (UT → E2E)
+
+**Trigger:**
+
+- `pull_request` targeting `dev` or `main`
+
+**What It Does:**
+
+Runs `unit_test.yml` first. If it passes, runs `e2e_test.yml`. E2E is skipped entirely on unit test failure.
+
+```
+pull_request → dev / main
+    ↓
+unit_test.yml   (fast, free)
+    ↓ only if passing
+e2e_test.yml    (slow, uses AWS)
+```
+
+**Restricted to:** `github.repository_owner == 'Karasu1t'`
+
+---
+
 ### 1. `unit_test.yml` - Unit Tests
 
 **Trigger:**
 
-- `push` to branches (src/glue/** or tests/**)
+- `push` to `dev` or `main` (paths: src/glue/**, tests/**)
+- Called by `ci.yml` via `workflow_call`
 - Manual: `workflow_dispatch`
-- Pull requests with test changes
 
 **What It Does:**
 
@@ -198,32 +223,35 @@ Must type: "confirm" (prevents accidental destruction)
 
 ## 📊 Typical Workflow Sequences
 
-### Sequence A: Local Dev → Auto Test → Deploy
+### Sequence A: Schema Change via /update-schema
 
 ```
-1. Modify: src/glue/glue_job.py
-2. git push origin main
+1. Run /update-schema command in Claude Code session
+   └─ Interactive workflow: Phase 1 (confirm) → Phase 2 (execute step by step)
    ↓
-3. unit_test.yml (auto)
-   └─ Pytest: UT-2, UT-3, etc. ← PASS/FAIL feedback in 30 seconds
+2. PR created targeting dev
    ↓
-4. terraform_apply.yml (auto)
-   └─ Deploy AWS resources ← Ready in 2-3 minutes
+3. ci.yml triggers automatically
+   ├─ unit_test.yml  ← PASS/FAIL in ~30 seconds
+   └─ e2e_test.yml   ← runs only if UT passed (~5-10 minutes)
    ↓
-5. e2e_test.yml (manual)
-   └─ Full pipeline verification ← Ready in 5-10 minutes
+4. Review results on PR page → merge to dev
 ```
 
-### Sequence B: Test Before Deploy
+### Sequence B: Direct Code Change → Deploy
 
 ```
-1. Create feature branch
-2. Push changes
-3. unit_test.yml runs automatically
-4. Create PR with test results
-5. Review + merge
-6. terraform_apply.yml auto-deploys
-7. Run e2e_test.yml manually for verification
+1. Modify src/glue/schema.py (schema changes) or src/glue/glue_job.py / tests/ (logic changes)
+2. git push origin dev
+   ↓
+3. unit_test.yml (auto, path-filtered)
+   └─ PASS/FAIL feedback in ~30 seconds
+   ↓
+4. Create PR dev → main
+   ↓
+5. ci.yml triggers (UT → E2E)
+   ↓
+6. Merge → terraform_apply.yml auto-deploys to AWS
 ```
 
 ### Sequence C: Emergency Teardown

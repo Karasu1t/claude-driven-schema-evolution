@@ -1,188 +1,175 @@
-# Claude-Driven Schema Evolution for Data Engineering
+# Claude-Driven Schema Evolution
 
-**Iceberg-First ETL Pipeline on AWS Glue with Test/Production Separation**
+Schema changes in ETL pipelines are repetitive, error-prone, and expensive.
+Every column addition touches multiple files — ETL logic, test data, expected outputs, infrastructure definitions — and missing even one breaks the pipeline silently.
 
-An enterprise data engineering pipeline: CSV (evolving schemas) → AWS Glue (PySpark) → Apache Iceberg (ACID, time-travel, versioning).
-- **Format**: Apache Iceberg v2 (mandatory, no fallback)
-- **Catalog**: AWS Glue Catalog (GlueCatalog)
-- **Environment Isolation**: Separate test and production buckets with automatic detection
-- **Orchestration**: EventBridge scheduled trigger (6:00 AM UTC daily)
+This project solves that with **Claude as an interactive co-engineer**: a `/update-schema` command walks through each affected file step by step, shows exactly what will change, and asks for confirmation before touching anything. When done, it opens a PR that automatically triggers unit tests followed by E2E tests on AWS.
 
 ---
 
-## 🎯 Project Overview
+## Why This Exists
 
-### Background
+In a production data platform, schema changes are inevitable. The traditional approach requires a developer to:
 
-Video platform data feeds arrive in CSV format with frequent schema changes. This project implements **automated schema evolution** with complete test/production separation.
+1. Manually identify every file that references the schema
+2. Apply consistent changes across ETL logic, tests, and infrastructure
+3. Validate that nothing was missed
 
-✅ **Automated Daily ETL**: EventBridge → Lambda → Glue Job (6:00 AM UTC)  
-✅ **Schema Flexibility**: Dynamic column detection and handling  
-✅ **Iceberg Format**: Time-travel queries, ACID transactions, version history  
-✅ **Test/Prod Isolation**: Separate S3 buckets with automatic switching  
-✅ **Infrastructure as Code**: Terraform for reproducible deployments  
+This is tedious, inconsistency-prone, and scales poorly as the pipeline grows. The cost isn't just time — it's the cognitive overhead of tracking dependencies and the risk of a silent failure in production.
+
+**The goal**: reduce that process to a single command, with a human in the loop at every decision point.
 
 ---
 
-## 🚀 Pipeline Architecture
+## How It Works
 
-### Data Flow
+### The `/update-schema` Command
+
+Invoked inside a Claude Code session:
 
 ```
-CSV File (with date in filename)
+/update-schema -add video_category StringType
+/update-schema -delete video_duration_minutes
+/update-schema -add video_category StringType -delete video_duration_minutes
+```
+
+**Phase 1 — Gather information (no files touched yet)**
+
+Claude reads the current schema from `src/glue/schema.py` (the single source of truth for column definitions), displays the column list, and asks where to insert the new column. Once confirmed, it summarizes the full changeset and waits for approval before proceeding.
+
+**Phase 2 — Execute step by step**
+
+Each file is handled one at a time. Before every change, Claude shows the exact diff and asks `y/n`. Answering `n` revises the proposal; only `y` moves forward.
+
+```
+[STEP 1/8] Branch creation
+[STEP 2/8] terraform/modules/aws/glue_table/main.tf   ← Glue Catalog column definition
+[STEP 3/8] test_data/sns_advertisement_yyyymmdd.csv   ← E2E test input
+[STEP 4/8] test_data/expected_output.csv              ← E2E expected output
+[STEP 5/8] src/glue/schema.py                         ← Schema definition (single source of truth)
+[STEP 6/8] tests/test_glue_job.py, test_data_transform.py ← Unit tests
+[STEP 7/8] .github/workflows/e2e_test.yml             ← CI config (if needed)
+[STEP 8/8] Commit + PR creation                       ← Triggers automated tests
+```
+
+### CI/CD: Unit Tests Before E2E
+
+Opening a PR to `dev` triggers a sequential pipeline:
+
+```
+pull_request → dev
     ↓
-S3 Upload (dev-karasuit-raw-bucket or dev-karasuit-test-raw-bucket)
+unit_test.yml   (schema evolution logic, Python 3.11 + 3.12)
+    ↓ only if passing
+e2e_test.yml    (upload CSV → trigger Glue Job → query Athena → compare output)
+```
+
+E2E tests are skipped entirely if unit tests fail. There is no value in running a full AWS pipeline test against broken logic.
+
+---
+
+## Pipeline Architecture
+
+```
+CSV (sns_advertisement_YYYYMMDD.csv)
     ↓
-Lambda Trigger (extracts YYYYMMDD from filename)
-    ├─ Detects environment: is filename in 'test' bucket?
-    ├─ Sets INPUT_BUCKET & OUTPUT_BUCKET accordingly
-    └─ Invokes Glue Job with --VER_DATE argument
+S3 Upload
+    ↓
+Lambda  ─── extracts date from filename
+        ─── detects test vs. production by bucket name
+        ─── invokes Glue Job with --VER_DATE
     ↓
 AWS Glue Job (PySpark 3.11)
-    ├─ Reads CSV from dynamic INPUT_BUCKET
-    ├─ Schema inference + mandatory columns check
-    ├─ Iceberg catalog configuration (GlueCatalog)
-    ├─ Creates test/prod database (if not exists)
-    ├─ Writes to Iceberg with partitioning by date
-    └─ Outputs to dynamic OUTPUT_BUCKET
+    ├── reads CSV with explicit schema
+    ├── handles missing columns via schema evolution
+    ├── writes to Apache Iceberg v2 (partitioned by date)
+    └── registers table in Glue Catalog
     ↓
-S3 Iceberg Warehouse
-    ├─ Test: s3://dev-karasuit-test-processed-bucket/iceberg-warehouse/
-    └─ Prod: s3://dev-karasuit-processed-bucket/iceberg-warehouse/
-    ↓
-AWS Glue Catalog + Athena
-    └─ Query: SELECT COUNT(*) FROM video_advertisement;
+Athena  ─── queryable via Glue Catalog
 ```
 
-### File Naming Convention
+### Environment Separation
 
-**Required Format:** `sns_advertisement_YYYYMMDD.csv`
+Lambda detects test vs. production by bucket name:
 
-Example: `sns_advertisement_20260529.csv`
-
-Lambda extracts the date via regex: `(\d{8})\.csv$` → `20260529`
+| | Test | Production |
+|---|---|---|
+| Input bucket | `dev-karasuit-test-raw-bucket` | `dev-karasuit-raw-bucket` |
+| Output bucket | `dev-karasuit-test-processed-bucket` | `dev-karasuit-processed-bucket` |
+| Glue database | `dev_karasuit_iceberg_db_test` | `dev_karasuit_iceberg_db` |
 
 ---
 
-## ✅ Verification Status (May 29, 2026)
+## Tech Stack
 
-### End-to-End Pipeline Testing
+| Layer | Technology |
+|---|---|
+| ETL | AWS Glue 4.0 (PySpark 3.11) |
+| Storage format | Apache Iceberg v2 |
+| Catalog | AWS Glue Catalog |
+| Orchestration | EventBridge → Lambda → Glue |
+| Infrastructure | Terraform |
+| CI/CD | GitHub Actions |
+| AI workflow | Claude Code (`/update-schema` custom command) |
 
-| Phase                          | Test Env | Prod Env | Status |
-|--------------------------------|----------|----------|--------|
-| **CSV Upload**                 | ✅       | ✅       | Tested |
-| **Lambda Trigger**             | ✅       | ✅       | Verified - Auto-detection working |
-| **Glue Job Execution**         | ✅       | ✅       | SUCCEEDED (55-99 sec) |
-| **CSV Read (5 rows)**          | ✅       | ✅       | Confirmed |
-| **Iceberg Table Creation**     | ✅       | ✅       | GlueCatalog registered |
-| **Data Write with Partition**  | ✅       | ✅       | Verified - partition_date=2026-05-29 |
-| **Athena Query**               | ✅       | ✅       | SELECT returned 5 rows |
+---
 
-### Test Data Example
+## Project Structure
 
-```csv
-video_title,views,channel_name,channel_subscribers,likes,video_duration_minutes
-Python Tutorial,45000,CodeMastery,120000,2300,42.5
-Data Analysis,38000,DataLab,98000,1900,38.0
-AWS Basics,52000,CloudTech,145000,2800,45.0
-Machine Learning,61000,AIExperts,189000,3500,52.0
-Database Design,47000,DataEng,112000,2100,40.0
+```
+.
+├── src/glue/
+│   ├── schema.py                      # SOURCE_SCHEMA / SOURCE_COLUMNS (single source of truth)
+│   └── glue_job.py                    # PySpark ETL logic
+├── terraform/
+│   ├── modules/aws/
+│   │   ├── glue_table/main.tf         # Glue Catalog table definition
+│   │   ├── glue_job/                  # Glue Job configuration
+│   │   ├── lambda_trigger/            # Lambda + IAM
+│   │   ├── eventbridge/               # Scheduled trigger
+│   │   └── s3_*/                      # Raw + processed buckets
+│   └── env/dev/aws/main.tf
+├── test_data/
+│   ├── sns_advertisement_yyyymmdd.csv # E2E test input template
+│   └── expected_output.csv            # E2E expected output
+├── tests/
+│   ├── test_glue_job.py               # Schema structure tests
+│   └── test_data_transform.py         # Data value and type correctness tests
+├── .github/workflows/
+│   ├── ci.yml                         # PR pipeline: UT → E2E (sequential)
+│   ├── unit_test.yml                  # Unit tests (also dispatchable)
+│   ├── e2e_test.yml                   # E2E tests (also dispatchable)
+│   ├── terraform_apply.yml
+│   └── terraform_destroy.yml
+└── .claude/commands/
+    └── update-schema.md               # /update-schema command definition
 ```
 
 ---
 
-## 🔧 Environment Separation
+## Schema
 
-### Automatic Detection
+### Source columns (from CSV)
 
-Lambda detects test mode by checking bucket name:
+| Column | Type |
+|---|---|
+| `video_title` | STRING |
+| `views` | LONG |
+| `channel_name` | STRING |
+| `channel_subscribers` | LONG |
+| `likes` | LONG |
+| `video_duration_minutes` | DOUBLE |
 
-```python
-if 'test' in bucket_from_event.lower():
-    input_bucket = 'dev-karasuit-test-raw-bucket'
-    output_bucket = 'dev-karasuit-test-processed-bucket'
-else:
-    input_bucket = 'dev-karasuit-raw-bucket'
-    output_bucket = 'dev-karasuit-processed-bucket'
-```
+### Metadata columns (added by Glue Job)
 
-### Bucket Configuration
-
-**Test Environment:**
-- Input: `dev-karasuit-test-raw-bucket`
-- Output: `dev-karasuit-test-processed-bucket`
-- Glue Database: `dev_karasuit_iceberg_db_test`
-- Iceberg Path: `s3://dev-karasuit-test-processed-bucket/iceberg-warehouse/`
-
-**Production Environment:**
-- Input: `dev-karasuit-raw-bucket`
-- Output: `dev-karasuit-processed-bucket`
-- Glue Database: `dev_karasuit_iceberg_db`
-- Iceberg Path: `s3://dev-karasuit-processed-bucket/iceberg-warehouse/`
+| Column | Type | Description |
+|---|---|---|
+| `partition_date` | DATE | Extracted from filename (YYYYMMDD → YYYY-MM-DD) |
+| `processed_at` | STRING | ISO timestamp of processing |
 
 ---
 
-## 📁 AWS Infrastructure
-
-### Glue Job Configuration
-
-- **Job Name**: `dev-karasuit-schema-evolution-etl`
-- **Runtime**: PySpark 3.11 on AWS Glue 4.0
-- **Workers**: 2× G.2X (2 DPU each)
-- **Timeout**: 30 minutes
-- **Job Bookmark**: DISABLED (for dev - allows re-processing test data)
-- **Arguments**: `--JOB_NAME`, `--INPUT_BUCKET`, `--OUTPUT_BUCKET`, `--VER_DATE`
-
-### Lambda Configuration
-
-- **Function Name**: `dev-karasuit-glue-job-trigger`
-- **Runtime**: Python 3.12
-- **Role**: IAM role with Glue permissions
-- **Trigger**: EventBridge scheduled rule
-- **Responsibilities**:
-  - Extract date from S3 filename
-  - Detect test vs. production mode
-  - Invoke Glue Job with dynamic arguments
-
-### EventBridge Rule
-
-- **Rule Name**: `dev-karasuit-scheduled-trigger-rule`
-- **Schedule**: `cron(0 6 * * ? *)` (Daily 6:00 AM UTC)
-- **Target**: Lambda function `dev-karasuit-glue-job-trigger`
-
----
-
-## 📊 Iceberg Schema
-
-### Required Columns (From CSV)
-
-```
-video_title          STRING
-views                LONG
-channel_name         STRING
-channel_subscribers  LONG
-likes                LONG
-video_duration_minutes DOUBLE
-```
-
-### Metadata Columns (Added by Glue)
-
-```
-partition_date  DATE      (extracted from filename YYYYMMDD)
-processed_at    STRING    (ISO format timestamp)
-```
-
-### Partitioning Strategy
-
-- **Partition Column**: `partition_date`
-- **Format**: Extracted from filename (YYYYMMDD → YYYY-MM-DD)
-- **Benefit**: Optimizes queries on specific dates, reduces scan time
-
----
-
-## 🛠️ Deployment & Terraform
-
-### Deploy Infrastructure
+## Deployment
 
 ```bash
 cd terraform/env/dev/aws
@@ -191,205 +178,15 @@ terraform plan
 terraform apply
 ```
 
-### Key Terraform Modules
-
-- **S3 Buckets**: Raw and processed buckets (test + prod)
-- **Glue Job**: PySpark ETL job with Iceberg configuration
-- **Lambda Function**: Trigger function with date extraction
-- **IAM Roles & Policies**: Permissions for Glue, Lambda, S3
-- **EventBridge Rule**: Scheduled daily invocation
-
 ---
 
-## 👨‍💻 Development Workflow (Git & CI/CD)
+## Design Decisions
 
-### Branch Strategy
+**Why confirmation at every step, not full automation?**
+Schema changes are infrequent and high-stakes. A fully automated approach removes the human judgment that catches contextual errors — wrong data types, misaligned sample values, test cases that pass structurally but verify the wrong behavior. The interactive model keeps the engineer accountable while eliminating the mechanical work.
 
-- **`main`**: Production-ready code (stable)
-- **`dev`**: Development integration branch (base for feature work)
-- **`test_YYYYMMDD`**: Feature branches (cut from `dev`, merged back via PR)
+**Why Iceberg over Parquet?**
+ACID transactions, time-travel queries, and schema versioning without rewriting entire partitions. For a pipeline where schema evolution is a first-class concern, Iceberg is the right primitive.
 
-### Development Process
-
-1. **Create Feature Branch**
-   ```bash
-   git checkout dev
-   git pull origin dev
-   git checkout -b test_20260530  # or test_feature-name
-   ```
-
-2. **Make Changes & Commit**
-   ```bash
-   # ... edit src/glue/glue_job.py, etc.
-   git add .
-   git commit -m "feat: Description of changes"
-   git push origin test_20260530
-   ```
-
-3. **Create Pull Request**
-   - Push to GitHub and create PR: `test_20260530` → `dev`
-   - **Automated checks trigger**:
-     - ✅ Unit Tests (via `unit_test.yml`)
-     - ✅ E2E Tests (via `e2e_test.yml`)
-
-4. **Review & Merge**
-   - All tests must pass
-   - Code review (if configured)
-   - Merge to `dev`
-
-5. **Release to Production**
-   - When `dev` is stable, create PR: `dev` → `main`
-   - Tests run again before merge
-   - After merge, manual EventBridge deployment (or scheduled via Terraform)
-
-### CI/CD Automation
-
-**E2E Test Workflow** (`e2e_test.yml`)
-- **Triggers**: PR creation/update on `dev` or `main` branches
-- **Test Data**: Git-managed `test_data/sns_advertisement_yyyymmdd.csv`
-- **Expected Output**: `test_data/expected_output.csv` (partition_date auto-replaced)
-- **Runtime**: ~2 minutes (90 seconds Glue wait + Athena query)
-- **Result**: ✅ PASS if all 35 cells match (skip dynamic `processed_at` timestamp)
-
-**Manual Trigger** (still available)
-```bash
-# Manually run E2E test from GitHub Actions UI:
-# Actions → E2E Test - Iceberg ETL Pipeline → Run workflow
-```
-
----
-
-## 🧪 Manual Testing
-
-### Test CSV Upload
-
-```bash
-# Upload to test bucket
-aws s3 cp test_data/sns_advertisement_20260529.csv \
-  s3://dev-karasuit-test-raw-bucket/sns_advertisement_20260529.csv \
-  --region ap-northeast-1
-
-# Lambda will auto-invoke on schedule (6 AM UTC) or manually:
-aws lambda invoke \
-  --function-name dev-karasuit-glue-job-trigger \
-  --payload '{"Records":[{"s3":{"bucket":{"name":"dev-karasuit-test-raw-bucket"}}}]}' \
-  response.json \
-  --region ap-northeast-1
-```
-
-### Verify Data in Athena
-
-```sql
--- Check test environment
-SELECT COUNT(*) as row_count, partition_date 
-FROM dev_karasuit_iceberg_db_test.video_advertisement 
-GROUP BY partition_date;
-
--- Expected output: 5 rows, partition_date=2026-05-29
-```
-
----
-
-## 📝 Schema Evolution Handling
-
-### Current Approach
-
-1. **Defined Schema**: Hardcoded in Glue Job for reliability
-2. **Missing Columns**: Added dynamically with `withColumn(col, lit(None))`
-3. **Data Type Mismatch**: Handled by PERMISSIVE mode + explicit casting
-
-### Adding New Columns
-
-To support new CSV columns:
-
-1. Add to schema definition in `src/glue/glue_job.py`
-2. Update Iceberg table (new version created automatically)
-3. Redeploy Glue Job: `terraform apply -target=module.glue_etl_job`
-
----
-
-## 🔍 Debugging & Logs
-
-### CloudWatch Logs
-
-```bash
-# Tail Glue Job logs
-aws logs tail /aws-glue/jobs/output \
-  --follow=false \
-  --region ap-northeast-1
-
-# Filter by Job ID
-aws logs tail /aws-glue/jobs/output \
-  --filter-pattern "jr_ca3383cb1e7bd7faa2313e3e7d4bcedc9863c88179f90116c7b19e415c960571" \
-  --region ap-northeast-1
-```
-
-### Check Job Status
-
-```bash
-aws glue get-job-run \
-  --job-name dev-karasuit-schema-evolution-etl \
-  --run-id <JOB_RUN_ID> \
-  --region ap-northeast-1
-```
-
----
-
-## 📦 Project Structure
-
-```
-.
-├── src/
-│   └── glue/
-│       └── glue_job.py              # PySpark ETL script
-├── terraform/
-│   ├── modules/aws/
-│   │   ├── s3/                      # S3 bucket modules (raw, processed, test)
-│   │   ├── glue_job/                # Glue Job configuration
-│   │   ├── lambda_trigger/          # Lambda function for date extraction
-│   │   ├── eventbridge/             # EventBridge scheduled rule
-│   │   └── iam/                     # IAM roles and policies
-│   └── env/dev/aws/
-│       └── main.tf                  # Dev environment definition
-├── test_data/
-│   └── sns_advertisement_20260529.csv  # Test dataset
-└── README.md                        # This file
-```
-
----
-
-## 🎓 Key Learnings
-
-1. **Filename Patterns Matter**: Spark CSV reader is sensitive to naming conventions
-   - ✅ Works: `sns_advertisement_20260529.csv`
-   - ❌ Fails: `_20260529.csv` (0 rows returned)
-
-2. **CRLF Line Endings**: CSV files must use LF (Unix), not CRLF (Windows)
-
-3. **Job Bookmark Disabled for Dev**: Allows re-processing test data without manual reset
-
-4. **Automatic Test/Prod Switching**: Environment detection by bucket name reduces error-prone configuration
-
-5. **Iceberg Partitioning**: Date-based partitioning optimizes query performance significantly
-
----
-
-## 🚀 Next Steps
-
-- [ ] Schedule real production data ingestion (6 AM UTC)
-- [ ] Add error alerting (SNS notifications on Glue Job failure)
-- [ ] Implement data validation tests (row counts, schema validation)
-- [ ] Add Iceberg time-travel query examples
-- [ ] Document rollback procedures
-
----
-
-## 📝 Version History
-
-**May 29, 2026 - Phase 5 Complete**
-- ✅ Iceberg v2 mandatory format (no Parquet fallback)
-- ✅ GlueCatalog integration
-- ✅ Test/Production environment separation
-- ✅ Multi-pattern filename detection
-- ✅ End-to-end pipeline verified and tested
-
+**Why UT before E2E in CI?**
+E2E tests invoke real AWS infrastructure (Lambda, Glue, Athena, S3). Running them against broken logic wastes time and incurs unnecessary cost. Unit tests are fast and cheap; they act as a gate.

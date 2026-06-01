@@ -1,16 +1,19 @@
 """
-Unit Tests for Glue Job Schema Evolution Logic
+Schema Evolution Tests
 
-Tests:
-- UT-2: VER_DATE must be provided (error handling)
-- UT-3: Schema evolution (missing columns auto-added)
+Validates structural correctness: column presence, order, and count.
+For data value and type correctness, see test_data_transform.py.
 """
 
+import sys
+import os
 import pytest
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, LongType
 from pyspark.sql.functions import lit
 from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'glue'))
+from schema import SOURCE_COLUMNS
 
 
 @pytest.fixture(scope="session")
@@ -78,24 +81,15 @@ class TestSchemaEvolution:
             ["video_title", "views"]
         )
         
-        # Required columns
-        required_columns = [
-            'video_title', 'views', 'channel_name', 
-            'channel_subscribers', 'likes', 'video_duration_minutes'
-        ]
-        
-        # Schema evolution: add missing columns
         df = input_df
-        for col_name in required_columns:
+        for col_name in SOURCE_COLUMNS:
             if col_name not in df.columns:
                 df = df.withColumn(col_name, lit(None).cast("string"))
-        
-        # Select in standard order
-        df = df.select(required_columns)
-        
-        # Verify
-        assert len(df.columns) == 6, "Should have 6 columns after evolution"
-        assert df.columns == required_columns, "Columns should be in correct order"
+
+        df = df.select(SOURCE_COLUMNS)
+
+        assert len(df.columns) == len(SOURCE_COLUMNS), "Should have all source columns after evolution"
+        assert df.columns == SOURCE_COLUMNS, "Columns should be in correct order"
         assert df.count() == 2, "Should preserve row count"
 
     def test_schema_evolution_all_columns_present(self, spark):
@@ -112,40 +106,30 @@ class TestSchemaEvolution:
             ]
         )
         
-        required_columns = [
-            'video_title', 'views', 'channel_name',
-            'channel_subscribers', 'likes', 'video_duration_minutes'
-        ]
-        
-        # Schema evolution (should be no-op)
         df = input_df
-        for col_name in required_columns:
+        for col_name in SOURCE_COLUMNS:
             if col_name not in df.columns:
                 df = df.withColumn(col_name, lit(None).cast("string"))
-        
-        df = df.select(required_columns)
-        
-        # Verify
-        assert len(df.columns) == 6, "Should have 6 columns"
+
+        df = df.select(SOURCE_COLUMNS)
+
+        assert len(df.columns) == len(SOURCE_COLUMNS), "Should have all source columns"
         assert df.count() == 2, "Should preserve row count"
         assert df.first()[0] == "video_1", "Should preserve data"
 
     def test_metadata_columns_added(self, spark):
-        """Test: Metadata columns are added correctly"""
+        """Test: Metadata columns added by glue_job.py are present."""
         input_data = [("video_1", "50000")]
         df = spark.createDataFrame(input_data, ["video_title", "views"])
-        
-        # Add metadata
+
         df = df.withColumn(
             "processed_at",
             lit(datetime.now().isoformat()).cast("string")
         )
-        df = df.withColumn("glue_job_run_id", lit("test-run-id").cast("string"))
-        
-        # Verify
-        assert "processed_at" in df.columns, "Should have processed_at column"
-        assert "glue_job_run_id" in df.columns, "Should have glue_job_run_id column"
-        assert df.first()["glue_job_run_id"] == "test-run-id", "Should have correct run ID"
+        df = df.withColumn("partition_date", lit("2026-05-29").cast("date"))
+
+        assert "processed_at" in df.columns
+        assert "partition_date" in df.columns
 
 
 class TestDataQuality:
@@ -156,14 +140,10 @@ class TestDataQuality:
         input_data = [("v1", "100")]
         df = spark.createDataFrame(input_data, ["video_title", "views"])
         
-        required_columns = ['video_title', 'views', 'channel_name', 
-                           'channel_subscribers', 'likes', 'video_duration_minutes']
-        
-        for col in required_columns:
+        for col in SOURCE_COLUMNS:
             if col not in df.columns:
                 df = df.withColumn(col, lit(None).cast("string"))
-        
-        df = df.select(required_columns)
-        
-        # Verify order
-        assert df.columns[:2] == required_columns[:2], "First columns should match"
+
+        df = df.select(SOURCE_COLUMNS)
+
+        assert df.columns[:2] == SOURCE_COLUMNS[:2], "First columns should match"
