@@ -1,18 +1,17 @@
 """
 Glue Job: Video Advertisement ETL with Schema Evolution
-Process: CSV -> Transform -> Iceberg (with Parquet fallback)
+Process: CSV -> Transform -> Apache Iceberg (AWS Glue 4.0)
 
-Phase 3: Iceberg Support with Native Glue 4.0 Configuration
-- Primary: Iceberg table format (ACID transactions, time-travel, versioning)
-- Fallback: Parquet if Iceberg initialization fails
-- Schema evolution: Dynamic column handling
+- Format : Iceberg v2 (mandatory — no fallback)
+- Catalog : AWS Glue Catalog (GlueCatalog)
+- Schema  : Single source of truth via SOURCE_SCHEMA / SOURCE_COLUMNS
+- Evolution: Missing columns auto-filled with null; new columns added to SOURCE_SCHEMA only
 """
 
 import sys
 import logging
 import os
 import boto3
-import traceback
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
@@ -124,59 +123,39 @@ try:
     
     logger.info(f"Reading CSV: {csv_path}")
     
-    # Define schema manually for reliability
-    from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType
-    
-    schema = StructType([
-        StructField("video_title", StringType(), True),
-        StructField("views", LongType(), True),
-        StructField("channel_name", StringType(), True),
-        StructField("channel_subscribers", LongType(), True),
-        StructField("likes", LongType(), True),
-        StructField("video_duration_minutes", DoubleType(), True)
-    ])
-    
-    # Read CSV with explicit schema
+    from schema import SOURCE_SCHEMA, SOURCE_COLUMNS
+
     try:
         df = spark.read.csv(
             csv_path,
-            header=True, schema=schema, mode="PERMISSIVE", encoding="utf-8"
+            header=True, schema=SOURCE_SCHEMA, mode="PERMISSIVE", encoding="utf-8"
         )
         record_count = df.count()
         logger.info(f"Successfully read {record_count} records from CSV")
     except Exception as e:
         logger.error(f"Failed to read CSV: {str(e)}")
         raise
-    
-    # Schema evolution
-    for col_name in ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes']:
+
+    for col_name in SOURCE_COLUMNS:
         if col_name not in df.columns:
             df = df.withColumn(col_name, lit(None).cast("string"))
-    
-    df = df.select(['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes'])
-    
-    # Add metadata columns: partition_date for partitioning, processed_at for lineage
+
+    df = df.select(SOURCE_COLUMNS)
+
     df = df.withColumn("partition_date", lit(partition_date).cast("date"))
     df = df.withColumn("processed_at", lit(datetime.now().isoformat()).cast("string"))
-    
-    logger.info(f"DataFrame before write has {df.count()} rows and {len(df.columns)} columns")
-    
-    # Write to Iceberg
+
     full_table_qualified = f"glue_catalog.{GLUE_DATABASE}.{TABLE_NAME}"
     iceberg_path = f"s3://{ICEBERG_WAREHOUSE.replace('s3://', '')}/{GLUE_DATABASE}.db/{TABLE_NAME}"
-    
+
+    logger.info(f"Writing {record_count} records to {full_table_qualified}")
+    logger.info(f"Columns: {df.columns}")
+
     try:
         spark.sql(f"DROP TABLE IF EXISTS {full_table_qualified} PURGE")
         logger.info(f"Dropped existing table: {full_table_qualified}")
     except Exception as e:
         logger.warning(f"Could not drop table: {e}")
-    
-    # Write with partitioning by date
-    # Iceberg automatically optimizes query performance based on partition
-    logger.info(f"Writing to Iceberg: {full_table_qualified} at {iceberg_path}")
-    logger.info(f"DataFrame has {df.count()} records before write")
-    logger.info(f"DataFrame columns: {df.columns}")
-    logger.info(f"DataFrame schema: {df.schema}")
     
     try:
         df.write \

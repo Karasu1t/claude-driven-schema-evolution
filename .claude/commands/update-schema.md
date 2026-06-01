@@ -1,219 +1,354 @@
-スキーマ変更ワークフローを開始します。
+Starting schema change workflow.
 
 ---
 
-## フェーズ1：変更内容の確定
+## Navigation (available at every Proceed prompt)
 
-実行前にすべての情報を確定させる。ここで決めた内容をもとにフェーズ2の全ファイル修正を行う。
+At any `Proceed? (y/n/back/all back/or describe what you want)` prompt:
+- `y`        → apply the change and move to the next step
+- `n`        → revise and re-present the same step (no files changed)
+- `back`     → revert the previous step's file changes (`git checkout -- <files changed in that step>`) and return to that step
+- `all back` → abort the entire workflow: revert all changes, delete the working branch, and return to `dev`
+  - Run: `git checkout dev && git branch -D {branch_name}`
+  - Display: `⚠️ Workflow aborted. All changes reverted. Back on dev.`
+- **Any other text** → treat as a custom request for this step. Handle it, then re-present the step result for y/n confirmation. Record the request and outcome in the session log (see Post-Workflow section).
 
-### 1-1. 操作の確認
+Always show `(y/n/back/all back/or describe what you want)` — not just `(y/n)`.
 
-引数: $ARGUMENTS
+## Session Log (internal — maintained throughout the workflow)
 
-引数の有無にかかわらず、必ず以下を表示して確認する：
-
+Track every custom input made during the session:
 ```
-どのような変更ですか？
-  1. カラムの追加    → -add {カラム名} {DataType}  例: -add video_category StringType
-  2. カラムの削除    → -delete {カラム名}           例: -delete video_duration_minutes
-  3. 追加と削除の両方 → -add ... -delete ...
-
-変更内容を教えてください:
+[STEP {N}] Custom request: "{what the user asked}"
+           Action taken  : "{what was done}"
+           Outcome       : success / revised / skipped
 ```
-
-引数がある場合は内容を表示して確認を取る。ない場合は入力を待つ。
+This log is used in the Post-Workflow improvement step.
 
 ---
 
-### 1-2. 挿入位置の確認（追加がある場合のみ）
+## Phase 1: Confirm Change Details
 
-`src/glue/glue_job.py` の StructType 定義（schema = StructType([...])）を読み込み、**生データのカラムのみ**を番号付きで表示する。
-※ `processed_at` / `glue_job_run_id` / `ver_date` などジョブが付加するメタカラムは表示しない。
+Gather all information before touching any files. Everything decided here drives Phase 2.
+
+### 1-1. Confirm Operation
+
+Arguments: $ARGUMENTS
+
+Regardless of whether arguments are provided, always display the following first:
 
 ```
-📌 挿入位置の確認
-  現在のカラム順（src/glue/glue_job.py の StructType 基準 ※メタカラム除く）:
+What kind of change is this?
+  1. Add a column    → -add {column_name} {DataType}      e.g. -add video_category StringType
+  2. Delete a column → -delete {column_name}               e.g. -delete video_duration_minutes
+  3. Rename a column → --modify {old_name} {new_name}      e.g. --modify video_views views_count
+  4. Both add & delete → -add ... -delete ...
+
+Enter your change:
+```
+
+If arguments are provided, display them and confirm. Otherwise wait for input.
+
+---
+
+### 1-2. Existence check (before any other step)
+
+Read `SOURCE_SCHEMA` from `src/glue/glue_job.py` and extract the current column list.
+
+**For `-add`:** Check whether the column name already exists.
+- If it exists → show error and return to 1-1:
+  ```
+  ❌ Column '{column_name}' already exists in the current schema.
+     Current columns: {list}
+     Please enter a different column name.
+  ```
+- If it does not exist → proceed.
+
+**For `-delete` and `--modify`:** Check whether the target column actually exists.
+- If it does not exist → show error and return to 1-1:
+  ```
+  ❌ Column '{column_name}' not found in the current schema.
+     Current columns: {list}
+  ```
+- If it exists → proceed.
+
+---
+
+### 1-3. Confirm Insert Position (add operations only)
+
+Read `SOURCE_SCHEMA` from `src/glue/glue_job.py` and display **source columns only**, numbered.
+Do NOT show metadata columns added by the Glue Job (`processed_at`, `glue_job_run_id`, `ver_date`, etc.).
+
+```
+📌 Insert Position
+  Current column order (from src/glue/glue_job.py SOURCE_SCHEMA — metadata columns excluded):
     1. video_title
     2. views
-    ...（StructType に定義された生データカラムのみ表示）
+    ... (all source columns)
 
-  {追加するカラム名} をどこに挿入しますか？
-  → 番号を入力（例: 3 と入力 → 3番目のカラムの後に挿入）
-  → l または +last で末尾に追加
+  Where should {column_name} be inserted?
+  → Enter a number (e.g. 3 → insert after the 3rd column)
+  → Type l or +last to append at the end
 ```
-
-入力を受け取り、挿入位置を確定する。
 
 ---
 
-### 1-3. 変更内容の最終確認
+### 1-4. Final Confirmation
 
-上記で確定した内容をまとめて表示し、実行前に一度だけ確認を取る：
+Display a summary of everything confirmed above. Ask for approval once before executing anything:
 
 ```
-📋 変更内容の確認
+📋 Change Summary
   ─────────────────────────────
-  操作:   追加 / 削除 / 両方
-  追加:   {カラム名}（{DataType}）  ← 追加がある場合
-  削除:   {カラム名}               ← 削除がある場合
-  挿入位置: {前のカラム名} の後    ← 追加がある場合（末尾なら「末尾」）
+  Operation : add / delete / rename / both
+  Add       : {column_name} ({DataType})          ← if adding
+  Delete    : {column_name}                        ← if deleting
+  Rename    : {old_name} → {new_name}              ← if renaming
+  Position  : after {preceding_column}             ← if adding (or "end" if last)
   ─────────────────────────────
-  修正対象ファイル（{N}件）:
-    - terraform/modules/aws/glue_table/main.tf   … Glueカタログのテーブル定義（Athenaで参照される列情報）
-    - test_data/sns_advertisement_yyyymmdd.csv   … E2Eテスト用の入力CSVテンプレート
-    - test_data/expected_output.csv              … E2Eテストの期待値（Athenaクエリ結果と比較）
-    - src/glue/glue_job.py                       … Glue Job本体のスキーマ定義・変換ロジック
-    - tests/test_glue_job.py                     … ユニットテスト（スキーマ進化ロジックの検証）
-    - .github/workflows/e2e_test.yml             … E2E自動テストのワークフロー定義（条件付き）
+  Files to modify ({N} total):
+    - terraform/modules/aws/glue_table/main.tf   … Glue Catalog table definition (referenced by Athena)
+    - test_data/sns_advertisement_yyyymmdd.csv   … E2E test input CSV template
+    - test_data/expected_output.csv              … E2E expected output (compared against Athena results)
+    - src/glue/schema.py                         … Schema definition (SOURCE_SCHEMA / SOURCE_COLUMNS — single source of truth)
+    - tests/test_glue_job.py                     … Schema structure tests (column presence, order, count)
+    - tests/test_data_transform.py               … Data value tests (sample_df fixture tuples need manual update)
+    - .github/workflows/e2e_test.yml             … E2E workflow definition (conditional)
 
-この内容でよいですか？ (y/n)
+Proceed with these changes? (y/n/back/all back)
 ```
 
-y なら フェーズ2 へ進む。n なら 1-1 に戻る。
+If y → move to Phase 2. If n → return to 1-1.
 
 ---
 
-## フェーズ2：実行（1ステップずつ確認）
+## Phase 2: Execute (one step at a time)
 
-**各ステップで差分を提示し `実施してよいですか？ (y/n)` と確認を取る。**
-y のみ次に進む。n なら修正して同じステップを再提示する。まとめて実施しない。
-
----
-
-### STEP 1/8：作業ブランチ作成
-
-ブランチ名ルール：
-- 追加のみ → `feature/{YYYYMMDD}/add_{カラム名}`
-- 削除のみ → `feature/{YYYYMMDD}/remove_{カラム名}`
-- 両方 → `feature/{YYYYMMDD}/schema_update`
-
-`git branch --show-current` で現在のブランチを確認し、`dev` でなければ先に切り替える。
-
-```
-[STEP 1/8] ブランチ作成
-  現在のブランチ: {現在のブランチ名}
-  → {devでない場合: "dev に切り替えてから作成" / devの場合: "そのまま作成"}
-  作成するブランチ: feature/{YYYYMMDD}/{操作}_{カラム名}
-実施してよいですか？ (y/n)
-```
+**Show the diff for each step and ask `Proceed? (y/n/back/all back)` before making any change.**
+Only `y` moves forward. Track which files were changed at each step to enable rollback.
 
 ---
 
-### STEP 2/8：terraform/modules/aws/glue_table/main.tf
+### STEP 1/8: Create working branch
+
+Branch naming rules:
+- Add only    → `feature/{YYYYMMDD}/add_{column_name}`
+- Delete only → `feature/{YYYYMMDD}/remove_{column_name}`
+- Rename only → `feature/{YYYYMMDD}/rename_{old_name}_to_{new_name}`
+- Both        → `feature/{YYYYMMDD}/schema_update`
+
+Check current branch with `git branch --show-current`. If not on `dev`, switch first.
+
+```
+[STEP 1/8] Create branch
+  Current branch : {current_branch}
+  → {if not dev: "switching to dev first" / if dev: "creating from here"}
+  New branch     : feature/{YYYYMMDD}/{operation}_{column_name}
+Proceed? (y/n/back/all back)
+```
+
+`back` at STEP 1 → no files have been changed yet; return to Phase 1 final confirmation.
+
+---
+
+### STEP 2/8: terraform/modules/aws/glue_table/main.tf
 
 ```
 [STEP 2/8] terraform/modules/aws/glue_table/main.tf
-  操作: {挿入位置の前後カラム名を明示}
-  差分:
-    {追加 or 削除する columns ブロックの差分}
-実施してよいですか？ (y/n)
+  Operation : {describe position with neighboring column names}
+  Diff      :
+    {columns block to add, remove, or rename}
+Proceed? (y/n/back/all back)
 ```
 
-DataType → Terraform型：StringType→string / LongType・IntegerType→bigint / DoubleType→double / BooleanType→boolean / DateType→date
+`back` → `git checkout -- terraform/modules/aws/glue_table/main.tf` and return to STEP 1.
+
+DataType → Terraform type:
+StringType → string / LongType · IntegerType → bigint / DoubleType → double / BooleanType → boolean / DateType → date
+
+**For `--modify`:** update the `name` field of the matching `columns` block.
 
 ---
 
-### STEP 3/8：test_data/sns_advertisement_yyyymmdd.csv
+### STEP 3/8: test_data/sns_advertisement_yyyymmdd.csv
 
 ```
 [STEP 3/8] test_data/sns_advertisement_yyyymmdd.csv
-  変更前ヘッダー: {現在のヘッダー}
-  変更後ヘッダー: {新しいヘッダー}
-  {追加の場合: サンプル値（5行）を表示}
-  {削除の場合: 削除される列の現在値を表示}
-実施してよいですか？ (y/n)
+  Before : {current header}
+  After  : {new header}
+  {if adding: show sample values for all 5 rows}
+  {if deleting: show current values in the column being removed}
+  {if renaming: show old column name → new column name in header}
+Proceed? (y/n/back/all back)
 ```
+
+`back` → `git checkout -- test_data/sns_advertisement_yyyymmdd.csv` and return to STEP 2.
 
 ---
 
-### STEP 4/8：test_data/expected_output.csv
+### STEP 4/8: test_data/expected_output.csv
 
 ```
 [STEP 4/8] test_data/expected_output.csv
-  変更前ヘッダー: {現在のヘッダー}
-  変更後ヘッダー: {新しいヘッダー}
-  {追加の場合: 期待値（5行）を表示}
-実施してよいですか？ (y/n)
+  Before : {current header}
+  After  : {new header}
+  {if adding: show expected values for all 5 rows}
+  {if renaming: show old column name → new column name}
+Proceed? (y/n/back/all back)
 ```
+
+`back` → `git checkout -- test_data/expected_output.csv` and return to STEP 3.
 
 ---
 
-### STEP 5/8：src/glue/glue_job.py
+### STEP 5/8: src/glue/schema.py
+
+`SOURCE_SCHEMA` and `SOURCE_COLUMNS` are defined here and imported by both `glue_job.py` and the test files. This is the only file that needs to change for schema modifications.
 
 ```
-[STEP 5/8] src/glue/glue_job.py
-  変更箇所: StructType 定義（行番号を明示）
-  差分:
-    {追加 or 削除する StructField の差分}
-実施してよいですか？ (y/n)
+[STEP 5/8] src/glue/schema.py
+  Location : SOURCE_SCHEMA definition (show line number)
+  Diff     :
+    {StructField to add, remove, or rename}
+Proceed? (y/n/back/all back)
 ```
+
+`back` → `git checkout -- src/glue/schema.py` and return to STEP 4.
+
+**For `--modify`:** update the `name` string in the matching `StructField`.
 
 ---
 
-### STEP 6/8：tests/test_glue_job.py
+### STEP 6/8: tests/test_glue_job.py + tests/test_data_transform.py
+
+Both files must be updated together in this step. Show diffs for each file separately, then ask for a single confirmation.
+
+**test_glue_job.py** — `SOURCE_COLUMNS` is imported from `schema.py` so column lists update automatically. Check for any hardcoded column lists in `createDataFrame` calls that still need manual update.
+
+**test_data_transform.py** — `SOURCE_SCHEMA` and `SOURCE_COLUMNS` are imported automatically, but the `sample_df` fixture has hardcoded tuple values (one value per row per column). A new column requires a new value in each of the 5 tuples.
 
 ```
-[STEP 6/8] tests/test_glue_job.py
-  変更箇所（{N}箇所）:
-    1. {関数名}（行番号）
-    2. {関数名}（行番号）
+[STEP 6/8] tests/test_glue_job.py + tests/test_data_transform.py
+
+  test_glue_job.py — {N} location(s):
+    1. {function_name} (line {N}): {what changes}
     ...
-  差分:
-    {全差分を表示}
-実施してよいですか？ (y/n)
+
+  test_data_transform.py — sample_df fixture (line {N}):
+    Before:
+      ("Python Tutorial", 45000, "CodeMastery", 120000, 2300, 42.5),
+      ...
+    After:
+      ("Python Tutorial", 45000, "CodeMastery", 120000, 2300, 42.5, {new_value}),
+      ...
+
+  Full diff:
+    {combined diff for both files}
+Proceed? (y/n/back/all back/or describe what you want)
 ```
+
+`back` → `git checkout -- tests/test_glue_job.py tests/test_data_transform.py` and return to STEP 5.
+
+**For `-delete`:** remove the value at the deleted column's position from each tuple in `sample_df`.
+**For `--modify`:** update the column name in any hardcoded `createDataFrame` column lists.
 
 ---
 
-### STEP 7/8：.github/workflows/e2e_test.yml
+### STEP 7/8: .github/workflows/e2e_test.yml
 
-追加→タイムスタンプ型なら skip_columns に追加が必要か判定。
-削除→skip_columns に該当カラムがあれば削除が必要か判定。
+For add: check if timestamp type → may need to add to `skip_columns`.
+For delete: check if column is in `skip_columns` → may need to remove it.
+For rename: check if old name is in `skip_columns` → update to new name if so.
 
 ```
 [STEP 7/8] .github/workflows/e2e_test.yml
-  判定: {修正必要 / 修正不要（理由を明示）}
-  {修正必要の場合は差分を表示}
-実施してよいですか？ (y/n)
+  Assessment : {change needed / no change needed (reason)}
+  {show diff if change is needed}
+Proceed? (y/n/back/all back)
+```
+
+`back` → `git checkout -- .github/workflows/e2e_test.yml` and return to STEP 6.
+
+---
+
+### STEP 8/8: Commit & open PR
+
+```
+[STEP 8/8] Commit & open PR
+  Changed files ({N}):
+    {list of modified files}
+  Commit message : {Conventional Commits format}
+  PR title       : {same as commit message}
+  Target branch  : dev
+
+  PR description (auto-generated):
+    ## Changes
+    {operation type: add / delete / rename / both}
+    {column name(s), type, position}
+
+    ## Modified Files
+    {bullet list of each file and what changed}
+
+    ## Automated Tests
+    Opening this PR against dev will automatically trigger:
+    - unit_test.yml (schema evolution logic, Python 3.11 + 3.12)
+    - e2e_test.yml  (Athena query results vs. expected output) — runs only if unit tests pass
+
+  ⚠️ Creating this PR will trigger unit_test and e2e_test automatically.
+Proceed? (y/n/back/all back)
+```
+
+`back` → return to STEP 7 (no git action needed, nothing committed yet).
+
+If y → run `git add` → `commit` → `push` → `gh pr create` and display the PR URL.
+
+```
+✅ Schema change workflow complete
+  PR: {URL}
+  GitHub Actions (unit_test → e2e_test) is now running.
+  Check the PR page for results.
 ```
 
 ---
 
-### STEP 8/8：コミット & PR 作成
+## Post-Workflow: Improvement Suggestions
 
-変更されたファイル一覧・コミットメッセージ・PR概要を提示する。
-PR を dev に向けて作成することで **GitHub Actions が自動的に unit_test / e2e_test を実行する**。
+After the PR is created, review the session log.
 
-```
-[STEP 8/8] コミット & PR 作成
-  変更ファイル（{N}件）:
-    {変更されたファイルの一覧}
-  コミットメッセージ: {Conventional Commits 形式}
-  PR タイトル: {同上}
-  マージ先: dev
+**If there were no custom inputs:** skip this section entirely.
 
-  PR 概要（本文に記載）:
-    ## 変更内容
-    {操作の種別（追加 / 削除 / 両方）}
-    {カラム名・型・挿入位置}
-
-    ## 修正ファイル
-    {変更したファイルと各ファイルで何を変えたかを箇条書き}
-
-    ## 自動テスト
-    このPRのdev向けマージにより以下が自動実行されます:
-    - unit_test.yml（スキーマ進化ロジックのユニットテスト）
-    - e2e_test.yml（Athenaクエリ結果と期待値の突合）
-
-  ⚠️ PR を作成すると unit_test / e2e_test が自動で走ります。
-実施してよいですか？ (y/n)
-```
-
-y なら `git add` → `commit` → `push` → `gh pr create` を実行し PR の URL を表示する。
+**If there were any custom inputs:** display the following and ask for approval:
 
 ```
-✅ スキーマ変更ワークフロー完了
-  PR: {URL}
-  GitHub Actions（unit_test / e2e_test）が自動実行中です。
-  PR ページで結果を確認してください。
+💡 Workflow Improvement Suggestions
+
+The following custom inputs were made during this session:
+  [STEP {N}] "{custom request}" → {action taken}
+  ...
+
+Based on these, the following improvements are proposed:
+
+  [A] Add to .claude/commands/update-schema.md:
+      {specific addition — e.g. a new flag, a new step, a new check}
+      Reason: {why this should be a permanent part of the workflow}
+
+  [B] Add to CLAUDE.md:
+      {specific addition — e.g. a project convention, a recurring pattern}
+      Reason: {why this belongs in the project guide}
+
+Apply these improvements? (y / n / select: A B / describe changes)
+```
+
+- `y`            → apply all proposed improvements
+- `n`            → skip, no changes made
+- `select: A B`  → apply only selected items (space-separated letters)
+- Any other text → treat as revision instructions and re-propose
+
+If improvements are applied, commit them separately:
+```
+chore: improve /update-schema workflow based on session feedback
+```
+
+```
+✅ Workflow guide updated. Changes will apply from the next /update-schema session.
 ```
