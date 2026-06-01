@@ -1,5 +1,9 @@
 # Claude-Driven Schema Evolution - Project Guide
 
+## Language
+
+Always respond in English in this project.
+
 ## Project Overview
 
 A pipeline that semi-automates schema changes (column additions and deletions) in an ETL system.
