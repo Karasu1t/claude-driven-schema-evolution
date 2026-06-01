@@ -19,6 +19,7 @@ resource "aws_glue_job" "etl_job" {
     "--datalake-formats"      = "iceberg"
     "--enable-spark-ui"       = "true"
     "--spark-event-logs-path" = "s3://${var.output_bucket}/spark-logs/"
+    "--extra-py-files"        = "s3://${var.output_bucket}/scripts/schema.py"
   }
 
   max_retries = var.max_retries
@@ -50,10 +51,16 @@ resource "aws_s3_object" "glue_script" {
   source = var.glue_script_source_path
   etag   = filemd5(var.glue_script_source_path)
 
-  tags = merge(
-    var.tags,
-    {
-      Name = "glue_job_script"
-    }
-  )
+  tags = merge(var.tags, { Name = "glue_job_script" })
+}
+
+# Upload schema.py as an extra Python file (imported by glue_job.py)
+resource "aws_s3_object" "glue_schema" {
+  count  = var.glue_schema_source_path != null ? 1 : 0
+  bucket = var.output_bucket
+  key    = "scripts/schema.py"
+  source = var.glue_schema_source_path
+  etag   = filemd5(var.glue_schema_source_path)
+
+  tags = merge(var.tags, { Name = "glue_schema" })
 }

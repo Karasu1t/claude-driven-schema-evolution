@@ -57,6 +57,7 @@ module "glue_etl_job" {
   output_bucket           = module.s3_lambda_processed_bucket.bucket_name
   script_location         = "s3://${module.s3_lambda_processed_bucket.bucket_name}/scripts/glue_job.py"
   glue_script_source_path = abspath("${path.module}/../../../../src/glue/glue_job.py")
+  glue_schema_source_path = abspath("${path.module}/../../../../src/glue/schema.py")
 
   worker_type     = "G.2X"
   num_workers     = 2

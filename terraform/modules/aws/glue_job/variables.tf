@@ -34,6 +34,12 @@ variable "glue_script_source_path" {
   default     = null
 }
 
+variable "glue_schema_source_path" {
+  description = "Local path to schema.py (uploaded as extra-py-files)"
+  type        = string
+  default     = null
+}
+
 variable "glue_version" {
   description = "Glue version"
   type        = string
