@@ -8,10 +8,7 @@ on:
     branches:
       - dev
       - main
-  pull_request:
-    paths:
-      - "src/glue/**"
-      - "tests/**"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
