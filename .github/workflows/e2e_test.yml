@@ -1,10 +1,7 @@
 name: E2E Test - Iceberg ETL Pipeline
 
 on:
-  pull_request:
-    branches:
-      - dev
-      - main
+  workflow_call:
   workflow_dispatch:
 
 permissions:
