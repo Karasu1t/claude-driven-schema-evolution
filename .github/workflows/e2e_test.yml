@@ -72,8 +72,31 @@ jobs:
 
       - name: Wait for Glue Job
         run: |
-          echo "Waiting 90 seconds for Glue Job to complete..."
-          sleep 90
+          JOB_NAME="dev-karasuit-schema-evolution-etl"
+          echo "Polling Glue Job status..."
+
+          for i in {1..40}; do
+            STATE=$(aws glue get-job-runs \
+              --job-name "$JOB_NAME" \
+              --region ap-northeast-1 \
+              --query 'JobRuns[0].JobRunState' \
+              --output text)
+
+            echo "Attempt $i/40: $STATE"
+
+            if [ "$STATE" = "SUCCEEDED" ]; then
+              echo "✓ Glue Job completed successfully"
+              exit 0
+            elif [ "$STATE" = "FAILED" ] || [ "$STATE" = "ERROR" ] || [ "$STATE" = "TIMEOUT" ]; then
+              echo "✗ Glue Job failed: $STATE"
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          echo "✗ Timed out waiting for Glue Job (10 minutes)"
+          exit 1
 
       - name: Prepare expected output CSV
         run: |
