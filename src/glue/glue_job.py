@@ -151,21 +151,24 @@ try:
     logger.info(f"Writing {record_count} records to {full_table_qualified}")
     logger.info(f"Columns: {df.columns}")
 
+    # Remove stale catalog entry via boto3 (no S3 purge attempt).
+    # Avoids the case where Spark SQL DROP fails silently and leaves
+    # a catalog entry pointing to non-existent S3 metadata.
+    glue_client = boto3.client("glue", region_name=glue_region)
     try:
-        spark.sql(f"DROP TABLE IF EXISTS {full_table_qualified} PURGE")
-        logger.info(f"Dropped existing table: {full_table_qualified}")
+        glue_client.delete_table(DatabaseName=GLUE_DATABASE, Name=TABLE_NAME)
+        logger.info(f"Cleared stale catalog entry: {GLUE_DATABASE}.{TABLE_NAME}")
+    except glue_client.exceptions.EntityNotFoundException:
+        logger.info(f"No existing catalog entry for {GLUE_DATABASE}.{TABLE_NAME}")
     except Exception as e:
-        logger.warning(f"Could not drop table: {e}")
-    
+        logger.warning(f"Could not clear catalog entry: {e}")
+
     try:
-        df.write \
-            .format("iceberg") \
-            .mode("overwrite") \
-            .option("path", iceberg_path) \
-            .option("format-version", "2") \
-            .partitionBy("partition_date") \
-            .option("write.parquet.compression-codec", "snappy") \
-            .saveAsTable(full_table_qualified)
+        df.writeTo(full_table_qualified) \
+            .partitionedBy("partition_date") \
+            .tableProperty("format-version", "2") \
+            .tableProperty("write.parquet.compression-codec", "snappy") \
+            .createOrReplace()
         logger.info(f"✓ Successfully wrote to Iceberg: {full_table_qualified}")
     except Exception as e:
         logger.error(f"✗ Failed to write to Iceberg: {str(e)}")
