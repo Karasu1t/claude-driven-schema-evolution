@@ -18,9 +18,14 @@ jobs:
     with:
       pr_number: ${{ github.event.pull_request.number }}
 
+  terraform-apply:
+    if: github.repository_owner == 'Karasu1t'
+    uses: ./.github/workflows/terraform_apply.yml
+    secrets: inherit
+
   e2e-test:
     if: github.repository_owner == 'Karasu1t'
-    needs: unit-test
+    needs: [unit-test, terraform-apply]
     uses: ./.github/workflows/e2e_test.yml
     secrets: inherit
     with:

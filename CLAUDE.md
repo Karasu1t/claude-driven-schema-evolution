@@ -48,19 +48,25 @@ Each step shows the exact diff and asks `Proceed? (y/n)` before making any chang
 | 5/8 | `src/glue/schema.py` | Schema definition — single source of truth (imported by glue_job.py and tests) |
 | 6/8 | `tests/test_glue_job.py`, `tests/test_data_transform.py` | Schema structure tests + data value tests (sample_df tuples updated manually) |
 | 7/8 | `.github/workflows/e2e_test.yml` | CI config (conditional — only if timestamp type) |
-| 8/8 | Commit + PR | Opens PR against `dev`, triggers UT → E2E automatically |
+| 8/8 | Commit + PR | Opens PR against `dev`, triggers Terraform apply + UT → E2E automatically |
 
 ---
 
 ## CI/CD Behavior
 
-Opening a PR against `dev` triggers the sequential CI pipeline (`ci.yml`):
+Opening a PR against `dev` triggers the CI pipeline (`ci.yml`):
 
 ```
-unit_test.yml  →  e2e_test.yml (only if unit tests pass)
+pull_request → dev
+    ├── unit_test.yml       (parallel)
+    └── terraform_apply.yml (parallel)
+              ↓ only if both pass
+         e2e_test.yml
 ```
 
-E2E tests are skipped if unit tests fail.
+- `unit_test.yml` and `terraform_apply.yml` run in parallel.
+- `e2e_test.yml` runs only after both succeed.
+- Terraform apply runs on PR so that the Glue Catalog and Glue Job are up to date before E2E queries Athena.
 
 ---
 
