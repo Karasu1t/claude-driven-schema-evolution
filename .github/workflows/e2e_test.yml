@@ -2,6 +2,11 @@ name: E2E Test - Iceberg ETL Pipeline
 
 on:
   workflow_call:
+    inputs:
+      pr_number:
+        type: number
+        required: false
+        default: 0
   workflow_dispatch:
 
 permissions:
@@ -294,7 +299,7 @@ jobs:
         continue-on-error: true
 
       - name: Comment on PR with E2E Test Results
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_call' && inputs.pr_number != 0)
         uses: actions/github-script@v7
         continue-on-error: true
         with:
@@ -302,10 +307,11 @@ jobs:
             const rawOutput = `${{ steps.e2e_compare.outputs.result }}`;
             const testStatus = `${{ steps.e2e_compare.outputs.status }}`;
             const status = testStatus === 'success' ? '✅ PASSED' : '❌ FAILED';
+            const prNumber = ${{ inputs.pr_number || github.event.pull_request.number || 0 }};
 
             try {
               github.rest.issues.createComment({
-                issue_number: context.issue.number,
+                issue_number: prNumber,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 body: `## 🚀 E2E Test Results\n\n${status}\n\n\`\`\`\n${rawOutput}\n\`\`\``
