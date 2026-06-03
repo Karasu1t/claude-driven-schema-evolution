@@ -183,16 +183,6 @@ Lambda detects test vs. production by bucket name:
 
 ---
 
-## Deployment
-
-```bash
-cd terraform/env/dev/aws
-terraform init
-terraform plan
-terraform apply
-```
-
----
 
 ## Design Decisions
 
