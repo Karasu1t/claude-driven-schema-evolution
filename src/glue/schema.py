@@ -11,6 +11,7 @@ SOURCE_SCHEMA = StructType([
     StructField("likes", LongType(), True),
     StructField("video_duration_minutes", DoubleType(), True),
     StructField("video_category", StringType(), True),
+    StructField("alert_count", LongType(), True),
 ])
 
 SOURCE_COLUMNS = [f.name for f in SOURCE_SCHEMA.fields]
