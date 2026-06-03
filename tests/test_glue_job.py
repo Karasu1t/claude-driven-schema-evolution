@@ -95,12 +95,12 @@ class TestSchemaEvolution:
     def test_schema_evolution_all_columns_present(self, spark):
         """Test: If all columns present, no changes"""
         input_data = [
-            ("video_1", "50000", "channel_1", "100000", "5000", "10"),
-            ("video_2", "75000", "channel_2", "150000", "7500", "15"),
+            ("video_1", "50000", "channel_1", "100000", "5000", "10", "Education"),
+            ("video_2", "75000", "channel_2", "150000", "7500", "15", "Technology"),
         ]
         input_df = spark.createDataFrame(
             input_data,
-            ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes']
+            ['video_title', 'views', 'channel_name', 'channel_subscribers', 'likes', 'video_duration_minutes', 'video_category']
         )
         
         df = input_df
