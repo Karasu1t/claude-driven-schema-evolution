@@ -52,19 +52,19 @@ Each file is handled one at a time. Before every change, Claude shows the exact 
 [STEP 8/8] Commit + PR creation                       ← Triggers automated tests
 ```
 
-### CI/CD: Unit Tests Before E2E
+### CI/CD: Terraform Apply Before E2E
 
-Opening a PR to `dev` triggers a sequential pipeline:
+Opening a PR to `dev` triggers a parallel-then-sequential pipeline:
 
 ```
 pull_request → dev
-    ↓
-unit_test.yml   (schema evolution logic, Python 3.11 + 3.12)
-    ↓ only if passing
-e2e_test.yml    (upload CSV → trigger Glue Job → query Athena → compare output)
+    ├── unit_test.yml      (schema evolution logic, Python 3.11 + 3.12)
+    └── terraform_apply.yml (update Glue Catalog + deploy Glue Job script)
+              ↓ only if both pass
+         e2e_test.yml      (upload CSV → trigger Glue Job → query Athena → compare output)
 ```
 
-E2E tests are skipped entirely if unit tests fail. There is no value in running a full AWS pipeline test against broken logic.
+Terraform apply and unit tests run in parallel. E2E only runs after both succeed — there is no value in testing AWS infrastructure against broken logic or a stale schema.
 
 ---
 
@@ -159,6 +159,7 @@ Lambda detects test vs. production by bucket name:
 | `channel_subscribers` | LONG |
 | `likes` | LONG |
 | `video_duration_minutes` | DOUBLE |
+| `video_category` | STRING |
 
 ### Metadata columns (added by Glue Job)
 
@@ -190,3 +191,6 @@ ACID transactions, time-travel queries, and schema versioning without rewriting 
 
 **Why UT before E2E in CI?**
 E2E tests invoke real AWS infrastructure (Lambda, Glue, Athena, S3). Running them against broken logic wastes time and incurs unnecessary cost. Unit tests are fast and cheap; they act as a gate.
+
+**Why run Terraform apply on PR, not just on merge to main?**
+E2E tests query actual Athena against the live Glue Catalog. Without applying the schema change first, the catalog is stale and E2E will always fail on the PR. Applying on PR is the only way to make the full CI pipeline meaningful within a single PR. Note: this project uses a single AWS account for both dev and production workflows — in a team setup, dev and prod would be separate accounts and Terraform apply on PR would target only the dev account.
