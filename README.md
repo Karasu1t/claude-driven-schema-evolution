@@ -5,6 +5,8 @@ Every column addition touches multiple files — ETL logic, test data, expected 
 
 This project solves that with **Claude as an interactive co-engineer**: a `/update-schema` command walks through each affected file step by step, shows exactly what will change, and asks for confirmation before touching anything. When done, it opens a PR that automatically triggers unit tests followed by E2E tests on AWS.
 
+![Demo](img/demo.gif)
+
 ---
 
 ## Why This Exists
@@ -33,59 +35,64 @@ Invoked inside a Claude Code session:
 /update-schema -add video_category StringType -delete video_duration_minutes
 ```
 
-**Phase 1 — Gather information (no files touched yet)**
+**Phase 1 — Planning** (no files touched): Claude reads `src/glue/schema.py`, shows the column list, and asks for the insert position. Once the full changeset is approved, Phase 2 begins.
 
-Claude reads the current schema from `src/glue/schema.py` (the single source of truth for column definitions), displays the column list, and asks where to insert the new column. Once confirmed, it summarizes the full changeset and waits for approval before proceeding.
+**Phase 2 — Execute**: Each of the 8 files is shown as a diff with a `y/n` prompt. Nothing is written until confirmed.
 
-**Phase 2 — Execute step by step**
-
-Each file is handled one at a time. Before every change, Claude shows the exact diff and asks `y/n`. Answering `n` revises the proposal; only `y` moves forward.
-
-```
-[STEP 1/8] Branch creation
-[STEP 2/8] terraform/modules/aws/glue_table/main.tf   ← Glue Catalog column definition
-[STEP 3/8] test_data/sns_advertisement_yyyymmdd.csv   ← E2E test input
-[STEP 4/8] test_data/expected_output.csv              ← E2E expected output
-[STEP 5/8] src/glue/schema.py                         ← Schema definition (single source of truth)
-[STEP 6/8] tests/test_glue_job.py, test_data_transform.py ← Unit tests
-[STEP 7/8] .github/workflows/e2e_test.yml             ← CI config (if needed)
-[STEP 8/8] Commit + PR creation                       ← Triggers automated tests
-```
-
-### CI/CD: Terraform Apply Before E2E
-
-Opening a PR to `dev` triggers a parallel-then-sequential pipeline:
-
-```
-pull_request → dev
-    ├── unit_test.yml      (schema evolution logic, Python 3.11 + 3.12)
-    └── terraform_apply.yml (update Glue Catalog + deploy Glue Job script)
-              ↓ only if both pass
-         e2e_test.yml      (upload CSV → trigger Glue Job → query Athena → compare output)
+```mermaid
+flowchart TD
+    A["/update-schema -add video_category StringType"] --> B["Phase 1: Read schema.py · confirm position · approve plan"]
+    B --> C{Confirmed?}
+    C -- n --> B
+    C -- y --> D["Phase 2 — 8 steps, each confirmed with y/n\n① branch  ② terraform main.tf  ③④ test CSVs\n⑤ schema.py  ⑥ unit tests  ⑦ e2e_test.yml  ⑧ commit + PR"]
+    D --> E["PR opened → dev"]
+    E --> F["unit_test.yml\nPython 3.11 + 3.12"] & G["terraform_apply.yml\nGlue Catalog + Job"]
+    F & G --> H{Both pass?}
+    H -- yes --> I["e2e_test.yml\nS3 upload → Glue Job → Athena → diff vs. expected"]
+    H -- no --> J["❌ CI blocked"]
+    I --> K["✅ UT + E2E results posted as PR comments"]
 ```
 
-Terraform apply and unit tests run in parallel. E2E only runs after both succeed — there is no value in testing AWS infrastructure against broken logic or a stale schema.
+![Auto PR creation](img/auto_make_pr.jpg)
+
+### Auto-Generated PR
+
+Claude creates the PR body automatically, summarizing every file touched:
+
+```
+## Changes
+- Operation: add
+- Column: video_category (StringType)
+- Position: after video_duration_minutes (end of source columns)
+
+## Modified Files
+- `terraform/modules/aws/glue_table/main.tf` — added video_category (string) column block
+- `test_data/sns_advertisement_yyyymmdd.csv` — added video_category header and sample values
+- `test_data/expected_output.csv` — added video_category header and expected values
+- `src/glue/schema.py` — added StructField("video_category", StringType(), True) to SOURCE_SCHEMA
+- `tests/test_glue_job.py` — updated hardcoded createDataFrame column list
+- `tests/test_data_transform.py` — added video_category value to each sample_df tuple
+```
+
+Once CI completes, UT and E2E results are automatically posted back as PR comments — see [PR #19](https://github.com/Karasu1t/claude-driven-schema-evolution/pull/19) for a real example.
 
 ---
 
 ## Pipeline Architecture
 
-```
-CSV (sns_advertisement_YYYYMMDD.csv)
-    ↓
-S3 Upload
-    ↓
-Lambda  ─── extracts date from filename
-        ─── detects test vs. production by bucket name
-        ─── invokes Glue Job with --VER_DATE
-    ↓
-AWS Glue Job (PySpark 3.11)
-    ├── reads CSV with explicit schema
-    ├── handles missing columns via schema evolution
-    ├── writes to Apache Iceberg v2 (partitioned by date)
-    └── registers table in Glue Catalog
-    ↓
-Athena  ─── queryable via Glue Catalog
+```mermaid
+flowchart LR
+    CSV["CSV\nsns_advertisement_YYYYMMDD.csv"]
+    S3R["S3\nraw bucket"]
+    Lambda["Lambda\nextract date · detect env\ninvoke Glue Job"]
+    Glue["AWS Glue Job\nPySpark 3.11\nIceberg write + schema evolution"]
+    S3P["S3\nprocessed bucket\n(Apache Iceberg v2)"]
+    Catalog["Glue Catalog"]
+    Athena["Athena"]
+
+    CSV --> S3R --> Lambda --> Glue
+    Glue --> S3P & Catalog
+    S3P & Catalog --> Athena
 ```
 
 ### Environment Separation
@@ -148,6 +155,12 @@ Lambda detects test vs. production by bucket name:
 ---
 
 ## Schema
+
+### Before / After Schema Evolution
+
+| Before | After |
+|--------|-------|
+| ![Before](img/before_evolution_schema.jpg) | ![After](img/after_evolution_schema.jpg) |
 
 ### Source columns (from CSV)
 
