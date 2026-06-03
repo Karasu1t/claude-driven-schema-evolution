@@ -6,6 +6,11 @@ on:
       - dev
       - main
 
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
 jobs:
   unit-test:
     if: github.repository_owner == 'Karasu1t'
