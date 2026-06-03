@@ -49,11 +49,6 @@ resource "aws_glue_catalog_table" "video_advertisement" {
     }
 
     columns {
-      name = "video_category"
-      type = "string"
-    }
-
-    columns {
       name = "processed_at"
       type = "string"
     }

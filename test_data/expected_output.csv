@@ -1,6 +1,6 @@
-video_title,views,channel_name,channel_subscribers,likes,video_duration_minutes,video_category,partition_date,processed_at
-AWS Basics,100000,CloudTech,200000,10000,25,Cloud Computing,yyyy-mm-dd,PLACEHOLDER
-Data Analysis,75000,DataScienceHub,150000,7500,20,Data Science,yyyy-mm-dd,PLACEHOLDER
-Database Design,85000,DBMasters,1180000,8500,22,Database,yyyy-mm-dd,PLACEHOLDER
-Machine Learning,120000,AIExperts,250000,12000,30,AI/ML,yyyy-mm-dd,PLACEHOLDER
-Python Tutorial,50000,ProgrammingChannel,100000,5000,15,Education,yyyy-mm-dd,PLACEHOLDER
+video_title,views,channel_name,channel_subscribers,likes,video_duration_minutes,partition_date,processed_at
+AWS Basics,100000,CloudTech,200000,10000,25,yyyy-mm-dd,PLACEHOLDER
+Data Analysis,75000,DataScienceHub,150000,7500,20,yyyy-mm-dd,PLACEHOLDER
+Database Design,85000,DBMasters,1180000,8500,22,yyyy-mm-dd,PLACEHOLDER
+Machine Learning,120000,AIExperts,250000,12000,30,yyyy-mm-dd,PLACEHOLDER
+Python Tutorial,50000,ProgrammingChannel,100000,5000,15,yyyy-mm-dd,PLACEHOLDER
