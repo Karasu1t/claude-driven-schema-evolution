@@ -26,11 +26,11 @@ def spark():
 def sample_df(spark):
     """Realistic input matching test_data/sns_advertisement_yyyymmdd.csv."""
     data = [
-        ("Python Tutorial",   45000, "CodeMastery",  120000, 2300, 42.5, "Education",        0),
-        ("Data Analysis",     38000, "DataLab",       98000, 1900, 38.0, "Data Science",     0),
-        ("AWS Basics",        52000, "CloudTech",    145000, 2800, 45.0, "Cloud Computing",  0),
-        ("Machine Learning",  61000, "AIExperts",    189000, 3500, 52.0, "AI/ML",            0),
-        ("Database Design",   47000, "DataEng",      112000, 2100, 40.0, "Database",         0),
+        ("Python Tutorial",   45000, "CodeMastery",  120000, 2300, 42.5),
+        ("Data Analysis",     38000, "DataLab",       98000, 1900, 38.0),
+        ("AWS Basics",        52000, "CloudTech",    145000, 2800, 45.0),
+        ("Machine Learning",  61000, "AIExperts",    189000, 3500, 52.0),
+        ("Database Design",   47000, "DataEng",      112000, 2100, 40.0),
     ]
     return spark.createDataFrame(data, SOURCE_COLUMNS)
 
